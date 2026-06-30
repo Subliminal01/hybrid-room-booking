@@ -1,10 +1,25 @@
 import pytest
 
-from app.config import ConfigError, get_settings
+from app.config import ConfigError, get_settings, normalize_database_url
 
 
 def clear_settings_cache():
     get_settings.cache_clear()
+
+
+def test_normalize_database_url_accepts_platform_postgres_urls():
+    assert (
+        normalize_database_url("postgres://user:pass@host:5432/db")
+        == "postgresql+psycopg://user:pass@host:5432/db"
+    )
+    assert (
+        normalize_database_url("postgresql://user:pass@host:5432/db")
+        == "postgresql+psycopg://user:pass@host:5432/db"
+    )
+    assert (
+        normalize_database_url("postgresql+psycopg://user:pass@host:5432/db")
+        == "postgresql+psycopg://user:pass@host:5432/db"
+    )
 
 
 def test_development_allows_local_defaults(monkeypatch):

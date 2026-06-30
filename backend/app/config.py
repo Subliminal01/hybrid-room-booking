@@ -43,10 +43,18 @@ def parse_optional_env(name: str) -> str | None:
     return stripped or None
 
 
+def normalize_database_url(value: str) -> str:
+    if value.startswith("postgres://"):
+        return "postgresql+psycopg://" + value.removeprefix("postgres://")
+    if value.startswith("postgresql://"):
+        return "postgresql+psycopg://" + value.removeprefix("postgresql://")
+    return value
+
+
 class Settings:
     def __init__(self) -> None:
         self.app_env = getenv("APP_ENV", "development").strip().lower()
-        self.database_url = getenv("DATABASE_URL", DEV_DATABASE_URL)
+        self.database_url = normalize_database_url(getenv("DATABASE_URL", DEV_DATABASE_URL))
         self.sql_echo = getenv("SQL_ECHO") == "1"
         self.auth_secret_key = getenv("AUTH_SECRET_KEY", DEV_AUTH_SECRET_KEY)
         self.access_token_expire_minutes = parse_int_env("ACCESS_TOKEN_EXPIRE_MINUTES", 60)
