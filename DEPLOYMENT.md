@@ -54,6 +54,11 @@ Production rejects weak auth secrets, non-PostgreSQL databases, insecure CORS
 origins, non-HTTPS frontend URLs, and mock payments unless explicitly allowed
 for a staging/demo environment.
 
+For a free demo deployment, use a free external PostgreSQL provider such as Neon
+or Supabase and set `DATABASE_URL` manually in the backend host. Keep
+`PAYMENT_PROVIDER=mock` with `ALLOW_MOCK_PAYMENTS_IN_PRODUCTION=1` only for demo
+validation, then switch to Razorpay or Stripe before accepting real payments.
+
 ## 3. Frontend Environment
 
 Set the public API URL at build time:

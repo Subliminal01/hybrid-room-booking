@@ -1,12 +1,8 @@
-databases:
-  - name: hybrid-room-booking-db
-    databaseName: room_booking
-    user: room_booking
-
 services:
   - type: web
     name: hybrid-room-booking-api
     runtime: docker
+    plan: free
     rootDir: backend
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health/ready
@@ -14,9 +10,7 @@ services:
       - key: APP_ENV
         value: production
       - key: DATABASE_URL
-        fromDatabase:
-          name: hybrid-room-booking-db
-          property: connectionString
+        sync: false
       - key: AUTH_SECRET_KEY
         generateValue: true
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
@@ -34,10 +28,6 @@ services:
       - key: EMAIL_FROM
         value: noreply@hybridrooms.local
       - key: PAYMENT_PROVIDER
-        value: razorpay
-      - key: RAZORPAY_KEY_ID
-        sync: false
-      - key: RAZORPAY_KEY_SECRET
-        sync: false
-      - key: RAZORPAY_WEBHOOK_SECRET
-        sync: false
+        value: mock
+      - key: ALLOW_MOCK_PAYMENTS_IN_PRODUCTION
+        value: 1
