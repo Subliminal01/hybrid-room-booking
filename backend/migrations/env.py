@@ -1,11 +1,11 @@
 from logging.config import fileConfig
-from os import getenv
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 from sqlmodel import SQLModel
 
 from app import models  # noqa: F401
+from app.config import get_settings
 
 
 config = context.config
@@ -13,9 +13,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-database_url = getenv("DATABASE_URL")
-if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
+config.set_main_option("sqlalchemy.url", get_settings().database_url)
 
 target_metadata = SQLModel.metadata
 
