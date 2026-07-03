@@ -277,6 +277,26 @@ button {
   color: var(--muted);
 }
 
+.remove-slot-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 10px;
+  background: #fff;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.remove-slot-button:hover:not(:disabled) {
+  border-color: rgba(180, 35, 24, 0.35);
+  background: #fff5f3;
+  color: var(--danger);
+}
+
 .results-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));

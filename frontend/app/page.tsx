@@ -1025,6 +1025,15 @@ export default function Home() {
     });
   }
 
+  function removeSlot(index: number) {
+    setSlots((current) => {
+      if (current.length <= 1) {
+        return current;
+      }
+      return current.filter((_, slotIndex) => slotIndex !== index);
+    });
+  }
+
   function updateAvailabilityDraft(workspaceId: string, patch: Partial<AvailabilityDraft>) {
     setAvailabilityDrafts((current) => ({
       ...current,
@@ -1576,13 +1585,15 @@ export default function Home() {
                     </div>
                   </div>
                   <button
-                    aria-label="Remove slot"
-                    className="icon-button"
+                    aria-label={`Remove rota day ${index + 1}`}
+                    className="remove-slot-button"
                     type="button"
-                    onClick={() => setSlots((current) => current.filter((_, i) => i !== index))}
+                    onClick={() => removeSlot(index)}
                     disabled={slots.length === 1}
+                    title={slots.length === 1 ? "At least one day is required" : "Remove day"}
                   >
                     <Trash2 size={16} />
+                    <span>Remove</span>
                   </button>
                 </div>
               ))}
