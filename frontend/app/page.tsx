@@ -113,12 +113,6 @@ type BookingGroupSummary = {
   cancellableBooking: Booking | null;
 };
 
-const initialSlots: SlotDraft[] = [
-  { date: "2026-06-15", start: "09:00", end: "18:00" },
-  { date: "2026-06-17", start: "09:00", end: "18:00" },
-  { date: "2026-06-19", start: "09:00", end: "18:00" },
-];
-
 const initialWorkspaceForm: WorkspaceForm = {
   title: "Koramangala focus room",
   description: "Quiet room with desk, Wi-Fi and easy metro access.",
@@ -135,6 +129,59 @@ const SESSION_STORAGE_KEY = "hybrid-stay-session";
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const BOOKING_PAGE_SIZE = 10;
 const AUDIT_PAGE_SIZE = 12;
+const DEFAULT_START_TIME = "09:00";
+const DEFAULT_END_TIME = "18:00";
+
+function toDateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function fromDateInputValue(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function addCalendarDays(date: Date, days: number) {
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + days);
+  return nextDate;
+}
+
+function isWeekday(date: Date) {
+  const day = date.getDay();
+  return day >= 1 && day <= 5;
+}
+
+function nextMatchingDates(count: number, allowedJsDays?: number[]) {
+  const dates: string[] = [];
+  let cursor = new Date();
+  while (dates.length < count) {
+    const allowed =
+      allowedJsDays === undefined
+        ? isWeekday(cursor)
+        : allowedJsDays.includes(cursor.getDay());
+    if (allowed) {
+      dates.push(toDateInputValue(cursor));
+    }
+    cursor = addCalendarDays(cursor, 1);
+  }
+  return dates;
+}
+
+function makeSlotsFromDates(dates: string[]): SlotDraft[] {
+  return dates.map((date) => ({
+    date,
+    start: DEFAULT_START_TIME,
+    end: DEFAULT_END_TIME,
+  }));
+}
+
+function makeInitialSlots() {
+  return makeSlotsFromDates(nextMatchingDates(3, [1, 3, 5]));
+}
 
 function toIsoSlot(slot: SlotDraft): TimeSlot {
   return {
@@ -316,9 +363,9 @@ export default function Home() {
   const [city, setCity] = useState("Bengaluru");
   const [minPrice, setMinPrice] = useState("0.00");
   const [maxPrice, setMaxPrice] = useState("1000.00");
-  const [rotaLabel, setRotaLabel] = useState("June office rota");
+  const [rotaLabel, setRotaLabel] = useState("Office rota");
   const [bookingNotes, setBookingNotes] = useState("");
-  const [slots, setSlots] = useState<SlotDraft[]>(initialSlots);
+  const [slots, setSlots] = useState<SlotDraft[]>(() => makeInitialSlots());
   const [results, setResults] = useState<Workspace[]>([]);
   const [myBookings, setMyBookings] = useState<Booking[]>([]);
   const [myBookingsTotal, setMyBookingsTotal] = useState(0);
@@ -357,6 +404,7 @@ export default function Home() {
       );
   }, [myBookings]);
   const selectedDays = slots.length;
+  const todayInput = useMemo(() => toDateInputValue(new Date()), []);
   const isHost = session?.user.role === "host" || session?.user.role === "admin";
   const isAdmin = session?.user.role === "admin";
 
@@ -953,6 +1001,30 @@ export default function Home() {
     );
   }
 
+  function applyRotaPreset(dates: string[], label: string) {
+    setSlots(makeSlotsFromDates(dates));
+    setRotaLabel(label);
+  }
+
+  function addNextRotaDay() {
+    setSlots((current) => {
+      const lastDateValue = current[current.length - 1]?.date;
+      const startingDate = lastDateValue ? fromDateInputValue(lastDateValue) : new Date();
+      let candidate = addCalendarDays(startingDate, 1);
+      while (!isWeekday(candidate)) {
+        candidate = addCalendarDays(candidate, 1);
+      }
+      return [
+        ...current,
+        {
+          date: toDateInputValue(candidate),
+          start: current[current.length - 1]?.start ?? DEFAULT_START_TIME,
+          end: current[current.length - 1]?.end ?? DEFAULT_END_TIME,
+        },
+      ];
+    });
+  }
+
   function updateAvailabilityDraft(workspaceId: string, patch: Partial<AvailabilityDraft>) {
     setAvailabilityDrafts((current) => ({
       ...current,
@@ -1436,6 +1508,41 @@ export default function Home() {
                 </div>
               </div>
 
+              <div className="rota-presets" aria-label="Quick rota presets">
+                <button
+                  className="preset-button"
+                  type="button"
+                  onClick={() => applyRotaPreset([toDateInputValue(new Date())], "Today")}
+                >
+                  Today
+                </button>
+                <button
+                  className="preset-button"
+                  type="button"
+                  onClick={() =>
+                    applyRotaPreset(nextMatchingDates(3, [1, 3, 5]), "Mon Wed Fri rota")
+                  }
+                >
+                  Mon/Wed/Fri
+                </button>
+                <button
+                  className="preset-button"
+                  type="button"
+                  onClick={() => applyRotaPreset(nextMatchingDates(2, [2, 4]), "Tue Thu rota")}
+                >
+                  Tue/Thu
+                </button>
+                <button
+                  className="preset-button"
+                  type="button"
+                  onClick={() =>
+                    applyRotaPreset(nextMatchingDates(5), "Next 5 workdays")
+                  }
+                >
+                  Next 5 workdays
+                </button>
+              </div>
+
               {slots.map((slot, index) => (
                 <div className="slot-row" key={`${slot.date}-${index}`}>
                   <div className="field">
@@ -1443,6 +1550,7 @@ export default function Home() {
                     <input
                       id={`date-${index}`}
                       type="date"
+                      min={todayInput}
                       value={slot.date}
                       onChange={(event) => updateSlot(index, { date: event.target.value })}
                     />
@@ -1483,12 +1591,7 @@ export default function Home() {
                 <button
                   className="btn secondary"
                   type="button"
-                  onClick={() =>
-                    setSlots((current) => [
-                      ...current,
-                      { date: "2026-06-22", start: "09:00", end: "18:00" },
-                    ])
-                  }
+                  onClick={addNextRotaDay}
                 >
                   <Plus size={16} />
                   Add day

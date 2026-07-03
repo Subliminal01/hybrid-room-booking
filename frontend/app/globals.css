@@ -172,6 +172,26 @@ button {
   gap: 10px;
 }
 
+.rota-presets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.preset-button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.preset-button:hover {
+  border-color: rgba(20, 125, 100, 0.45);
+  background: var(--panel-2);
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
