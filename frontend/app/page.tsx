@@ -1027,9 +1027,6 @@ export default function Home() {
 
   function removeSlot(index: number) {
     setSlots((current) => {
-      if (current.length <= 1) {
-        return current;
-      }
       return current.filter((_, slotIndex) => slotIndex !== index);
     });
   }
@@ -1152,6 +1149,9 @@ export default function Home() {
     }
     if (Number(minPrice) > Number(maxPrice)) {
       return "Min daily price cannot be higher than max daily price.";
+    }
+    if (slots.length === 0) {
+      return "Add at least one rota day before searching.";
     }
     for (const slot of slots) {
       if (!slot.date || !slot.start || !slot.end) {
@@ -1589,14 +1589,19 @@ export default function Home() {
                     className="remove-slot-button"
                     type="button"
                     onClick={() => removeSlot(index)}
-                    disabled={slots.length === 1}
-                    title={slots.length === 1 ? "At least one day is required" : "Remove day"}
+                    title="Remove day"
                   >
                     <Trash2 size={16} />
                     <span>Remove</span>
                   </button>
                 </div>
               ))}
+
+              {slots.length === 0 ? (
+                <div className="empty-rota">
+                  No rota days selected. Add a day or choose a quick rota.
+                </div>
+              ) : null}
 
               <div className="button-row">
                 <button
