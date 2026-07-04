@@ -14,7 +14,7 @@ import {
   Trash2,
   Wallet,
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   AuditEvent,
   AvailabilityRule,
@@ -159,6 +159,26 @@ function formatTypedDisplayDate(value: string) {
   const day = digits.slice(2, 4);
   const year = digits.slice(4, 8);
   return [month, day, year].filter(Boolean).join("/");
+}
+
+function countDigitsBeforeCursor(value: string, cursor: number) {
+  return value.slice(0, cursor).replace(/\D/g, "").length;
+}
+
+function cursorPositionForDigitCount(value: string, digitCount: number) {
+  if (digitCount <= 0) {
+    return 0;
+  }
+  let seenDigits = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    if (/\d/.test(value[index])) {
+      seenDigits += 1;
+      if (seenDigits === digitCount) {
+        return index + 1;
+      }
+    }
+  }
+  return value.length;
 }
 
 function displayDateToIso(value: string) {
@@ -424,6 +444,7 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const pendingDateCursor = useRef<{ index: number; position: number } | null>(null);
 
   const apiSlots = useMemo(() => slots.map(toIsoSlot), [slots]);
   const groupedMyBookings = useMemo(() => {
@@ -469,6 +490,16 @@ export default function Home() {
       window.localStorage.removeItem(SESSION_STORAGE_KEY);
     }
   }, []);
+
+  useEffect(() => {
+    const cursor = pendingDateCursor.current;
+    if (!cursor) {
+      return;
+    }
+    pendingDateCursor.current = null;
+    const input = document.getElementById(`date-${cursor.index}`) as HTMLInputElement | null;
+    input?.setSelectionRange(cursor.position, cursor.position);
+  }, [slots]);
 
   useEffect(() => {
     setAvailabilityDrafts((current) => {
@@ -1041,8 +1072,17 @@ export default function Home() {
     );
   }
 
-  function updateSlotDateText(index: number, value: string) {
+  function updateSlotDateText(index: number, value: string, cursorPosition: number | null) {
     const dateText = formatTypedDisplayDate(value);
+    if (cursorPosition !== null) {
+      pendingDateCursor.current = {
+        index,
+        position: cursorPositionForDigitCount(
+          dateText,
+          countDigitsBeforeCursor(value, cursorPosition),
+        ),
+      };
+    }
     const parsedDate = displayDateToIso(dateText);
     updateSlot(index, {
       dateText,
@@ -1635,7 +1675,13 @@ export default function Home() {
                         inputMode="numeric"
                         placeholder="MM/DD/YYYY"
                         value={slot.dateText}
-                        onChange={(event) => updateSlotDateText(index, event.target.value)}
+                        onChange={(event) =>
+                          updateSlotDateText(
+                            index,
+                            event.currentTarget.value,
+                            event.currentTarget.selectionStart,
+                          )
+                        }
                       />
                       <button
                         aria-label={`Open date picker for rota day ${index + 1}`}
