@@ -263,9 +263,17 @@ button {
 
 .slot-row {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
   align-items: end;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.slot-row > .grid-2 {
+  grid-column: 1 / -1;
 }
 
 .icon-button {
@@ -283,6 +291,7 @@ button {
   justify-content: center;
   gap: 6px;
   min-height: 42px;
+  min-width: 112px;
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 0 10px;
