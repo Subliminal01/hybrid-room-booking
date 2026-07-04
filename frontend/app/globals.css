@@ -294,6 +294,15 @@ button {
   box-shadow: 0 1px 4px rgba(18, 28, 24, 0.1);
 }
 
+.mode-badge {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  padding: 10px 12px;
+  color: #2d5148;
+  font-weight: 800;
+}
+
 .slot-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

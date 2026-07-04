@@ -133,6 +133,16 @@ const AUDIT_PAGE_SIZE = 12;
 const DEFAULT_START_TIME = "09:00";
 const DEFAULT_END_TIME = "18:00";
 
+function dashboardForRole(role: TokenResponse["user"]["role"]): DashboardTab {
+  if (role === "admin") {
+    return "admin";
+  }
+  if (role === "host") {
+    return "host";
+  }
+  return "worker";
+}
+
 function toDateInputValue(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -466,7 +476,7 @@ export default function Home() {
   }, [myBookings]);
   const selectedDays = slots.length;
   const todayInput = useMemo(() => toDateInputValue(new Date()), []);
-  const isHost = session?.user.role === "host" || session?.user.role === "admin";
+  const isHost = session?.user.role === "host";
   const isAdmin = session?.user.role === "admin";
 
   useEffect(() => {
@@ -484,7 +494,7 @@ export default function Home() {
       setSession(parsedSession);
       setProfileName(parsedSession.user.full_name);
       setProfilePhone(parsedSession.user.phone_number ?? "");
-      setActiveTab(parsedSession.user.role === "worker" ? "worker" : "host");
+      setActiveTab(dashboardForRole(parsedSession.user.role));
       void bootstrapSession(parsedSession);
     } catch {
       window.localStorage.removeItem(SESSION_STORAGE_KEY);
@@ -545,7 +555,7 @@ export default function Home() {
       });
       setMyBookings(personal.items);
       setMyBookingsTotal(personal.total);
-      if (currentSession.user.role === "host" || currentSession.user.role === "admin") {
+      if (currentSession.user.role === "host") {
         const [workspaces, bookings, revenue] = await Promise.all([
           listMyWorkspaces(currentSession.access_token),
           listHostBookings(currentSession.access_token, { limit: BOOKING_PAGE_SIZE }),
@@ -586,7 +596,7 @@ export default function Home() {
     setProfileName(nextSession.user.full_name);
     setProfilePhone(nextSession.user.phone_number ?? "");
     window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(nextSession));
-    setActiveTab(nextSession.user.role === "worker" ? "worker" : "host");
+    setActiveTab(dashboardForRole(nextSession.user.role));
   }
 
   function clearSessionState() {
@@ -647,7 +657,7 @@ export default function Home() {
             });
       persistSession(response);
       setMessage(`Signed in as ${response.user.email}`);
-      if (response.user.role === "host" || response.user.role === "admin") {
+      if (response.user.role === "host") {
         const [workspaces, bookings, revenue] = await Promise.all([
           listMyWorkspaces(response.access_token),
           listHostBookings(response.access_token, { limit: BOOKING_PAGE_SIZE }),
@@ -961,9 +971,6 @@ export default function Home() {
       setReviewWorkspaces((current) => current.filter((item) => item.id !== reviewed.id));
       await refreshAuditEvents(session.access_token);
       setMessage(`${reviewed.title} marked ${reviewed.review_status}.`);
-      if (isHost) {
-        await refreshHostWorkspaces(session.access_token);
-      }
     });
   }
 
@@ -1465,34 +1472,11 @@ export default function Home() {
                 <LogIn size={18} />
               </div>
               <div className="panel-body">
-                <div className="tabs" aria-label="Dashboard view">
-                  <button
-                    className={`tab ${activeTab === "worker" ? "active" : ""}`}
-                    type="button"
-                    onClick={() => setActiveTab("worker")}
-                  >
-                    Worker
-                  </button>
-                  <button
-                    className={`tab ${activeTab === "host" ? "active" : ""}`}
-                    type="button"
-                    onClick={() => setActiveTab("host")}
-                    disabled={!isHost}
-                  >
-                    Host
-                  </button>
-                  <button
-                    className={`tab ${activeTab === "admin" ? "active" : ""}`}
-                    type="button"
-                    onClick={() => setActiveTab("admin")}
-                    disabled={!isAdmin}
-                  >
-                    Admin
-                  </button>
+                <div className="mode-badge" aria-label="Current dashboard mode">
+                  {activeTab === "worker" ? "Worker dashboard" : null}
+                  {activeTab === "host" ? "Host dashboard" : null}
+                  {activeTab === "admin" ? "Admin dashboard" : null}
                 </div>
-                {!isHost ? (
-                  <div className="muted">Host tools unlock when this account is registered as a host.</div>
-                ) : null}
                 <div className="account-form">
                   <div className="security-row">
                     <div>
@@ -2279,14 +2263,19 @@ export default function Home() {
           </section>
           ) : null}
 
+          {activeTab !== "admin" ? (
           <section className="panel">
             <div className="panel-header">
               <div>
-                <h2>Booking History</h2>
+                <h2>{activeTab === "host" ? "Guest Bookings" : "Booking History"}</h2>
                 <div className="muted">
-                  Showing {groupedMyBookings.length} rota group
-                  {groupedMyBookings.length === 1 ? "" : "s"} from {myBookings.length} loaded day
-                  {myBookings.length === 1 ? "" : "s"}
+                  {activeTab === "host"
+                    ? `Showing ${hostBookings.length} of ${hostBookingsTotal} guest booking${
+                        hostBookingsTotal === 1 ? "" : "s"
+                      }`
+                    : `Showing ${groupedMyBookings.length} rota group${
+                        groupedMyBookings.length === 1 ? "" : "s"
+                      } from ${myBookings.length} loaded day${myBookings.length === 1 ? "" : "s"}`}
                 </div>
               </div>
               <History size={18} />
@@ -2302,7 +2291,7 @@ export default function Home() {
                   <History size={16} />
                   Refresh
                 </button>
-                {session?.user.role === "host" || session?.user.role === "admin" ? (
+                {activeTab === "host" ? (
                   <button
                     className="btn secondary"
                     type="button"
@@ -2314,6 +2303,8 @@ export default function Home() {
                   </button>
                 ) : null}
               </div>
+              {activeTab === "worker" ? (
+              <>
               <div className="booking-list">
                 {myBookings.length === 0 ? (
                   <div className="muted">Your bookings will appear here.</div>
@@ -2432,7 +2423,9 @@ export default function Home() {
                   Load more bookings
                 </button>
               ) : null}
-              {isHost && hostRevenue ? (
+              </>
+              ) : null}
+              {activeTab === "host" && hostRevenue ? (
                 <div className="revenue-summary" aria-label="Host revenue summary">
                   <div className="metric">
                     <Wallet size={18} />
@@ -2482,7 +2475,10 @@ export default function Home() {
                   </div>
                 </div>
               ) : null}
-              {hostBookings.length > 0 ? (
+              {activeTab === "host" && hostBookings.length === 0 ? (
+                <div className="muted">Guest bookings will appear here once workers book your rooms.</div>
+              ) : null}
+              {activeTab === "host" && hostBookings.length > 0 ? (
                 <>
                   <h3>
                     Host bookings{" "}
@@ -2534,6 +2530,7 @@ export default function Home() {
               ) : null}
             </div>
           </section>
+          ) : null}
         </section>
       </div>
 
