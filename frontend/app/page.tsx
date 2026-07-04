@@ -59,6 +59,7 @@ type DashboardTab = "worker" | "host" | "admin";
 
 type SlotDraft = {
   date: string;
+  dateText: string;
   start: string;
   end: string;
 };
@@ -144,6 +145,44 @@ function fromDateInputValue(value: string) {
   return new Date(year, month - 1, day);
 }
 
+function toDisplayDate(value: string) {
+  if (!value) {
+    return "";
+  }
+  const [year, month, day] = value.split("-");
+  return `${month}/${day}/${year}`;
+}
+
+function formatTypedDisplayDate(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  const month = digits.slice(0, 2);
+  const day = digits.slice(2, 4);
+  const year = digits.slice(4, 8);
+  return [month, day, year].filter(Boolean).join("/");
+}
+
+function displayDateToIso(value: string) {
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
+  if (!match) {
+    return null;
+  }
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  const year = Number(match[3]);
+  if (year < 1000 || month < 1 || month > 12 || day < 1 || day > 31) {
+    return null;
+  }
+  const candidate = new Date(year, month - 1, day);
+  if (
+    candidate.getFullYear() !== year ||
+    candidate.getMonth() !== month - 1 ||
+    candidate.getDate() !== day
+  ) {
+    return null;
+  }
+  return toDateInputValue(candidate);
+}
+
 function addCalendarDays(date: Date, days: number) {
   const nextDate = new Date(date);
   nextDate.setDate(nextDate.getDate() + days);
@@ -174,6 +213,7 @@ function nextMatchingDates(count: number, allowedJsDays?: number[]) {
 function makeSlotsFromDates(dates: string[]): SlotDraft[] {
   return dates.map((date) => ({
     date,
+    dateText: toDisplayDate(date),
     start: DEFAULT_START_TIME,
     end: DEFAULT_END_TIME,
   }));
@@ -1001,6 +1041,34 @@ export default function Home() {
     );
   }
 
+  function updateSlotDateText(index: number, value: string) {
+    const dateText = formatTypedDisplayDate(value);
+    const parsedDate = displayDateToIso(dateText);
+    updateSlot(index, {
+      dateText,
+      ...(parsedDate ? { date: parsedDate } : {}),
+    });
+  }
+
+  function updateSlotDateFromPicker(index: number, value: string) {
+    updateSlot(index, {
+      date: value,
+      dateText: toDisplayDate(value),
+    });
+  }
+
+  function openDatePicker(index: number) {
+    const picker = document.getElementById(`date-picker-${index}`) as HTMLInputElement | null;
+    if (!picker) {
+      return;
+    }
+    if (typeof picker.showPicker === "function") {
+      picker.showPicker();
+      return;
+    }
+    picker.click();
+  }
+
   function applyRotaPreset(dates: string[], label: string) {
     setSlots(makeSlotsFromDates(dates));
     setRotaLabel(label);
@@ -1018,6 +1086,7 @@ export default function Home() {
         ...current,
         {
           date: toDateInputValue(candidate),
+          dateText: toDisplayDate(toDateInputValue(candidate)),
           start: current[current.length - 1]?.start ?? DEFAULT_START_TIME,
           end: current[current.length - 1]?.end ?? DEFAULT_END_TIME,
         },
@@ -1154,8 +1223,12 @@ export default function Home() {
       return "Add at least one rota day before searching.";
     }
     for (const slot of slots) {
-      if (!slot.date || !slot.start || !slot.end) {
+      const parsedDate = displayDateToIso(slot.dateText);
+      if (!slot.dateText || !parsedDate || !slot.start || !slot.end) {
         return "Each rota day needs a date, start time, and end time.";
+      }
+      if (parsedDate < todayInput) {
+        return "Rota dates cannot be in the past.";
       }
       const start = new Date(`${slot.date}T${slot.start}:00+05:30`);
       const end = new Date(`${slot.date}T${slot.end}:00+05:30`);
@@ -1556,13 +1629,35 @@ export default function Home() {
                 <div className="slot-row" key={`${slot.date}-${index}`}>
                   <div className="field">
                     <label htmlFor={`date-${index}`}>Date</label>
-                    <input
-                      id={`date-${index}`}
-                      type="date"
-                      min={todayInput}
-                      value={slot.date}
-                      onChange={(event) => updateSlot(index, { date: event.target.value })}
-                    />
+                    <div className="date-entry">
+                      <input
+                        id={`date-${index}`}
+                        inputMode="numeric"
+                        placeholder="MM/DD/YYYY"
+                        value={slot.dateText}
+                        onChange={(event) => updateSlotDateText(index, event.target.value)}
+                      />
+                      <button
+                        aria-label={`Open date picker for rota day ${index + 1}`}
+                        className="date-picker-button"
+                        type="button"
+                        onClick={() => openDatePicker(index)}
+                      >
+                        <CalendarPlus size={16} />
+                      </button>
+                      <input
+                        aria-hidden="true"
+                        className="native-date-input"
+                        id={`date-picker-${index}`}
+                        tabIndex={-1}
+                        type="date"
+                        min={todayInput}
+                        value={slot.date}
+                        onChange={(event) =>
+                          updateSlotDateFromPicker(index, event.target.value)
+                        }
+                      />
+                    </div>
                   </div>
                   <div className="grid-2">
                     <div className="field">

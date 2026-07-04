@@ -166,6 +166,39 @@ button {
   border-color: var(--accent);
 }
 
+.date-entry {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 6px;
+}
+
+.date-picker-button {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+}
+
+.date-picker-button:hover {
+  border-color: rgba(20, 125, 100, 0.45);
+  background: var(--panel-2);
+}
+
+.native-date-input {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 42px;
+  height: 42px;
+  pointer-events: none;
+  opacity: 0;
+}
+
 .button-row {
   display: flex;
   flex-wrap: wrap;
