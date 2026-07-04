@@ -2,8 +2,10 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 from starlette.testclient import TestClient
 
+from app.auth_service import issue_user_session, register_user as register_user_service
 from app.database import get_session
 from app.main import app
+from app.models import UserRole
 
 
 def make_session_override():
@@ -22,6 +24,23 @@ def make_session_override():
 
 
 def register_user(client: TestClient, *, email: str, role: str) -> str:
+    if role == "admin":
+        session_override = app.dependency_overrides[get_session]
+        session_generator = session_override()
+        session = next(session_generator)
+        try:
+            user = register_user_service(
+                session,
+                email=email,
+                password="strong-password",
+                full_name="Test User",
+                role=UserRole.ADMIN,
+            )
+            access_token, _ = issue_user_session(session, user)
+            return access_token
+        finally:
+            session_generator.close()
+
     response = client.post(
         "/auth/register",
         json={

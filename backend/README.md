@@ -70,6 +70,19 @@ The interval uses `[)` semantics: the start is included, the end is excluded. So
 
 Creates a user and returns a bearer token.
 
+Public registration only accepts `worker` and `host` roles. Admin accounts must
+be created through the controlled backend script:
+
+```powershell
+$env:ADMIN_EMAIL="admin@example.com"
+$env:ADMIN_PASSWORD="replace-with-a-long-admin-password"
+$env:ADMIN_FULL_NAME="Platform Admin"
+python scripts/create_admin.py
+```
+
+On deployed environments, run the same script from a one-off job/shell with
+`DATABASE_URL` pointing at the production database.
+
 ### `POST /auth/login`
 
 Authenticates an existing user and returns a bearer token.

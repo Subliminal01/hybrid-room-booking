@@ -1,9 +1,11 @@
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 from starlette.testclient import TestClient
 
 from app.database import get_session
 from app.main import app
+from app.models import User, UserRole
+from scripts import create_admin
 
 
 def make_session_override():
@@ -366,6 +368,45 @@ def test_duplicate_register_is_rejected():
     assert client.post("/auth/register", json=payload).status_code == 409
 
     app.dependency_overrides.clear()
+
+
+def test_public_registration_rejects_admin_role():
+    app.dependency_overrides[get_session] = make_session_override()
+    client = TestClient(app)
+
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": "admin@example.com",
+            "password": "strong-password",
+            "full_name": "Platform Admin",
+            "role": "admin",
+        },
+    )
+
+    assert response.status_code == 422
+
+    app.dependency_overrides.clear()
+
+
+def test_create_admin_script_creates_admin_user(monkeypatch):
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    SQLModel.metadata.create_all(engine)
+    monkeypatch.setattr(create_admin, "engine", engine)
+    monkeypatch.setenv("ADMIN_EMAIL", "admin@example.com")
+    monkeypatch.setenv("ADMIN_PASSWORD", "strong-admin-password")
+    monkeypatch.setenv("ADMIN_FULL_NAME", "Platform Admin")
+
+    create_admin.main()
+
+    with Session(engine) as session:
+        user = session.exec(select(User).where(User.email == "admin@example.com")).one()
+        assert user.role == UserRole.ADMIN
+        assert user.full_name == "Platform Admin"
 
 
 def test_login_rejects_wrong_password():

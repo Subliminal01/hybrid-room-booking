@@ -31,6 +31,13 @@ class UserRegisterRequest(BaseModel):
             raise ValueError("email must be valid")
         return value
 
+    @field_validator("role")
+    @classmethod
+    def reject_public_admin_registration(cls, value: UserRole) -> UserRole:
+        if value == UserRole.ADMIN:
+            raise ValueError("admin users cannot be created through public registration")
+        return value
+
 
 class UserLoginRequest(BaseModel):
     email: str = Field(max_length=320)
