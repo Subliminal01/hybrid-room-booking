@@ -114,7 +114,7 @@ def test_admin_can_review_workspace():
 
     review_response = client.patch(
         f"/admin/workspaces/{created['id']}/review",
-        json={"review_status": "approved"},
+        json={"review_status": "approved", "review_note": "Photos and availability checked."},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
@@ -140,6 +140,7 @@ def test_admin_can_review_workspace():
     assert audit_items[0]["entity_id"] == created["id"]
     assert audit_items[0]["details"]["previous_review_status"] == "pending"
     assert audit_items[0]["details"]["review_status"] == "approved"
+    assert audit_items[0]["details"]["review_note"] == "Photos and availability checked."
 
     app.dependency_overrides.clear()
 

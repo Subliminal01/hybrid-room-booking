@@ -576,6 +576,7 @@ def review_workspace(
             "title": workspace.title,
             "previous_review_status": previous_status.value,
             "review_status": workspace.review_status.value,
+            **({"review_note": request.review_note} if request.review_note else {}),
         },
     )
     session.commit()

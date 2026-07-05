@@ -498,11 +498,15 @@ export function reviewWorkspace(
   token: string,
   workspaceId: string,
   reviewStatus: WorkspaceReviewStatus,
+  reviewNote?: string,
 ) {
   return apiRequest<Workspace>(`/admin/workspaces/${workspaceId}/review`, {
     token,
     method: "PATCH",
-    body: { review_status: reviewStatus },
+    body: {
+      review_status: reviewStatus,
+      ...(reviewNote?.trim() ? { review_note: reviewNote.trim() } : {}),
+    },
   });
 }
 

@@ -731,6 +731,10 @@ a:hover {
   padding-top: 12px;
 }
 
+.review-note-field {
+  margin-top: 10px;
+}
+
 .availability-editor {
   display: flex;
   flex-direction: column;

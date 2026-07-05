@@ -296,6 +296,12 @@ class WorkspaceUpdateRequest(BaseModel):
 
 class WorkspaceReviewRequest(BaseModel):
     review_status: WorkspaceReviewStatus
+    review_note: str | None = Field(default=None, max_length=500)
+
+    @field_validator("review_note", mode="before")
+    @classmethod
+    def normalize_review_note(cls, value: str | None) -> str | None:
+        return normalize_optional_text(value)
 
 
 class WorkspaceResponse(BaseModel):

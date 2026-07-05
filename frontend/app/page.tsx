@@ -462,6 +462,7 @@ function summarizeAuditDetails(details: Record<string, unknown>) {
     "title",
     "review_status",
     "previous_review_status",
+    "review_note",
     "total_paid",
     "total_refunded",
     "booking_count",
@@ -545,6 +546,7 @@ export default function Home() {
   const [hostRevenue, setHostRevenue] = useState<HostRevenueSummary | null>(null);
   const [hostWorkspaces, setHostWorkspaces] = useState<Workspace[]>([]);
   const [reviewWorkspaces, setReviewWorkspaces] = useState<Workspace[]>([]);
+  const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [auditEventsTotal, setAuditEventsTotal] = useState(0);
   const [availabilityDrafts, setAvailabilityDrafts] = useState<Record<string, AvailabilityDraft>>({});
@@ -733,6 +735,7 @@ export default function Home() {
     setHostRevenue(null);
     setHostWorkspaces([]);
     setReviewWorkspaces([]);
+    setReviewNotes({});
     setAuditEvents([]);
     setAuditEventsTotal(0);
     setListingDrafts({});
@@ -1123,8 +1126,14 @@ export default function Home() {
       return;
     }
     await runAction(async () => {
-      const reviewed = await reviewWorkspace(session.access_token, workspace.id, reviewStatus);
+      const reviewNote = reviewNotes[workspace.id]?.trim();
+      const reviewed = await reviewWorkspace(session.access_token, workspace.id, reviewStatus, reviewNote);
       setReviewWorkspaces((current) => current.filter((item) => item.id !== reviewed.id));
+      setReviewNotes((current) => {
+        const next = { ...current };
+        delete next[workspace.id];
+        return next;
+      });
       await refreshAuditEvents(session.access_token);
       setMessage(`${reviewed.title} marked ${reviewed.review_status}.`);
     });
@@ -2066,6 +2075,20 @@ export default function Home() {
                             </div>
                             <div className={`status review-${workspace.review_status ?? "pending"}`}>
                               Review: {workspace.review_status ?? "pending"}
+                            </div>
+                            <div className="field review-note-field">
+                              <label htmlFor={`review-note-${workspace.id}`}>Review note</label>
+                              <textarea
+                                id={`review-note-${workspace.id}`}
+                                placeholder="Optional reason or approval note"
+                                value={reviewNotes[workspace.id] ?? ""}
+                                onChange={(event) =>
+                                  setReviewNotes((current) => ({
+                                    ...current,
+                                    [workspace.id]: event.target.value,
+                                  }))
+                                }
+                              />
                             </div>
                           </div>
                           <div className="button-row">
