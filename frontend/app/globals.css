@@ -38,6 +38,16 @@ button {
   cursor: pointer;
 }
 
+a {
+  color: var(--accent-dark);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
 .app-shell {
   min-height: 100vh;
 }
@@ -83,6 +93,52 @@ button {
   grid-template-columns: minmax(280px, 380px) 1fr;
   gap: 20px;
   padding: 24px clamp(18px, 4vw, 48px) 48px;
+}
+
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 0 clamp(18px, 4vw, 48px) 32px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.legal-page {
+  min-height: 100vh;
+  padding: 32px clamp(18px, 5vw, 64px);
+}
+
+.legal-document {
+  max-width: 860px;
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  padding: clamp(22px, 4vw, 42px);
+}
+
+.legal-back-link {
+  display: inline-flex;
+  margin-bottom: 18px;
+}
+
+.legal-document h1 {
+  margin: 0 0 6px;
+  font-size: clamp(30px, 5vw, 44px);
+  line-height: 1.05;
+}
+
+.legal-document h2 {
+  margin: 28px 0 8px;
+  font-size: 18px;
+}
+
+.legal-document p {
+  margin: 0;
+  color: #334139;
+  line-height: 1.7;
 }
 
 .stack {

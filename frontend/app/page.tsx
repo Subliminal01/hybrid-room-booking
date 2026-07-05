@@ -2734,6 +2734,13 @@ export default function Home() {
         </section>
       </div>
 
+      <footer className="site-footer" aria-label="Legal and support links">
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+        <a href="/refunds">Cancellation and refunds</a>
+        <a href="/contact">Contact</a>
+      </footer>
+
       {pendingConfirmation ? (
         <div className="modal-backdrop" role="presentation">
           <section
