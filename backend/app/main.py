@@ -56,6 +56,7 @@ from app.models import (
 )
 from app.observability import configure_observability
 from app.payment_service import (
+    PaymentProviderError,
     checkout_reference_for_payments,
     get_or_create_pending_payment,
     get_pending_payment,
@@ -64,6 +65,7 @@ from app.payment_service import (
     mark_payment_succeeded,
     checkout_url,
     refund_succeeded_payments_for_booking,
+    prepare_provider_checkout,
     total_payment_amount,
     verify_payment_webhook_signature,
 )
@@ -1031,6 +1033,18 @@ def create_booking_group_checkout_session(
     )
     payments = [get_or_create_pending_payment(session, booking) for booking in bookings]
     checkout_reference = checkout_reference_for_payments(payments)
+    try:
+        checkout_payload = prepare_provider_checkout(
+            session=session,
+            booking_group_id=booking_group_id,
+            payments=payments,
+            checkout_reference=checkout_reference,
+        )
+    except PaymentProviderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
     return PaymentCheckoutSessionResponse(
         booking_group_id=booking_group_id,
         payments=[PaymentResponse.model_validate(payment) for payment in payments],
@@ -1043,6 +1057,7 @@ def create_booking_group_checkout_session(
             checkout_reference,
             payments[0].provider if payments else "mock",
         ),
+        checkout_payload=checkout_payload,
     )
 
 
@@ -1142,62 +1157,141 @@ async def handle_payment_webhook(
             detail="Invalid webhook JSON payload",
         ) from exc
 
-    event = body.get("event")
+    raw_event = body.get("event")
+    event = raw_event
+    provider_reference = body.get("provider_reference")
+    provider_checkout_reference = None
+    if normalized_provider == "razorpay":
+        payment_entity = (
+            body.get("payload", {})
+            .get("payment", {})
+            .get("entity", {})
+        )
+        if raw_event == "payment.captured":
+            event = "payment.succeeded"
+        elif raw_event == "payment.failed":
+            event = "payment.failed"
+        provider_reference = payment_entity.get("id")
+        provider_checkout_reference = payment_entity.get("order_id")
+
     if event not in {"payment.succeeded", "payment.failed"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unsupported payment webhook event",
         )
 
-    provider_reference = body.get("provider_reference")
-    if not isinstance(provider_reference, str) or not provider_reference:
+    if normalized_provider == "razorpay":
+        if not isinstance(provider_checkout_reference, str) or not provider_checkout_reference:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Razorpay order_id is required",
+            )
+    elif not isinstance(provider_reference, str) or not provider_reference:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="provider_reference is required",
         )
 
-    payment = session.exec(
-        select(Payment).where(Payment.provider_reference == provider_reference)
-    ).first()
-    if payment is None or payment.provider != normalized_provider:
+    if normalized_provider == "razorpay":
+        payments = session.exec(
+            select(Payment)
+            .where(Payment.provider_checkout_reference == provider_checkout_reference)
+            .order_by(Payment.created_at)
+        ).all()
+    else:
+        payment = session.exec(
+            select(Payment).where(Payment.provider_reference == provider_reference)
+        ).first()
+        payments = [payment] if payment is not None else []
+    payments = [payment for payment in payments if payment.provider == normalized_provider]
+    if not payments:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Payment not found",
         )
 
-    booking = session.get(Booking, payment.booking_id)
-    if booking is None:
+    booking_pairs = []
+    for payment in payments:
+        booking = session.get(Booking, payment.booking_id)
+        if booking is not None:
+            booking_pairs.append((payment, booking))
+    if not booking_pairs:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Booking not found",
         )
+    first_payment, first_booking = booking_pairs[0]
+    response_reference = (
+        provider_checkout_reference
+        if normalized_provider == "razorpay" and isinstance(provider_checkout_reference, str)
+        else provider_reference
+    )
 
-    if payment.status == PaymentStatus.SUCCEEDED and booking.status == BookingStatus.CONFIRMED:
+    if all(
+        payment.status == PaymentStatus.SUCCEEDED and booking.status == BookingStatus.CONFIRMED
+        for payment, booking in booking_pairs
+    ):
         return PaymentWebhookResponse(
             provider=normalized_provider,
-            provider_reference=provider_reference,
-            payment_id=payment.id,
-            booking_id=booking.id,
-            status=payment.status,
+            provider_reference=response_reference,
+            payment_id=first_payment.id,
+            booking_id=first_booking.id,
+            status=first_payment.status,
             processed=False,
         )
-    if event == "payment.failed" and payment.status == PaymentStatus.FAILED:
+    if event == "payment.failed" and all(
+        payment.status == PaymentStatus.FAILED for payment, _booking in booking_pairs
+    ):
         return PaymentWebhookResponse(
             provider=normalized_provider,
-            provider_reference=provider_reference,
-            payment_id=payment.id,
-            booking_id=booking.id,
-            status=payment.status,
+            provider_reference=response_reference,
+            payment_id=first_payment.id,
+            booking_id=first_booking.id,
+            status=first_payment.status,
             processed=False,
         )
 
     if event == "payment.failed":
-        mark_payment_failed(payment)
+        for payment, booking in booking_pairs:
+            mark_payment_failed(payment)
+            session.add(payment)
+            record_audit_event(
+                session,
+                actor_user_id=None,
+                action=AuditAction.PAYMENT_FAILED,
+                entity_type="payment",
+                entity_id=payment.id,
+                details={
+                    "booking_id": str(booking.id),
+                    "booking_group_id": str(booking.booking_group_id),
+                    "provider": payment.provider,
+                    "provider_reference": payment.provider_reference,
+                    "provider_checkout_reference": payment.provider_checkout_reference,
+                    "amount": str(payment.amount),
+                    "currency": payment.currency,
+                },
+            )
+        session.commit()
+        session.refresh(first_payment)
+        return PaymentWebhookResponse(
+            provider=normalized_provider,
+            provider_reference=response_reference,
+            payment_id=first_payment.id,
+            booking_id=first_booking.id,
+            status=first_payment.status,
+            processed=True,
+        )
+
+    now = utc_now()
+    for payment, booking in booking_pairs:
+        mark_payment_succeeded(payment, now)
+        booking.status = BookingStatus.CONFIRMED
         session.add(payment)
+        session.add(booking)
         record_audit_event(
             session,
             actor_user_id=None,
-            action=AuditAction.PAYMENT_FAILED,
+            action=AuditAction.BOOKING_PAID,
             entity_type="payment",
             entity_id=payment.id,
             details={
@@ -1205,50 +1299,20 @@ async def handle_payment_webhook(
                 "booking_group_id": str(booking.booking_group_id),
                 "provider": payment.provider,
                 "provider_reference": payment.provider_reference,
+                "provider_checkout_reference": payment.provider_checkout_reference,
                 "amount": str(payment.amount),
                 "currency": payment.currency,
             },
         )
-        session.commit()
-        session.refresh(payment)
-        return PaymentWebhookResponse(
-            provider=normalized_provider,
-            provider_reference=provider_reference,
-            payment_id=payment.id,
-            booking_id=booking.id,
-            status=payment.status,
-            processed=True,
-        )
-
-    now = utc_now()
-    mark_payment_succeeded(payment, now)
-    booking.status = BookingStatus.CONFIRMED
-    session.add(payment)
-    session.add(booking)
-    record_audit_event(
-        session,
-        actor_user_id=None,
-        action=AuditAction.BOOKING_PAID,
-        entity_type="payment",
-        entity_id=payment.id,
-        details={
-            "booking_id": str(booking.id),
-            "booking_group_id": str(booking.booking_group_id),
-            "provider": payment.provider,
-            "provider_reference": payment.provider_reference,
-            "amount": str(payment.amount),
-            "currency": payment.currency,
-        },
-    )
     session.commit()
-    session.refresh(payment)
+    session.refresh(first_payment)
 
     return PaymentWebhookResponse(
         provider=normalized_provider,
-        provider_reference=provider_reference,
-        payment_id=payment.id,
-        booking_id=booking.id,
-        status=payment.status,
+        provider_reference=response_reference,
+        payment_id=first_payment.id,
+        booking_id=first_booking.id,
+        status=first_payment.status,
         processed=True,
     )
 

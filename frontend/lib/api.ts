@@ -131,6 +131,7 @@ export type PaymentCheckoutSession = {
   provider: string;
   checkout_reference: string;
   checkout_url: string;
+  checkout_payload: Record<string, unknown>;
 };
 
 export type BookingGroupCancel = {

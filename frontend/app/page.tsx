@@ -117,6 +117,33 @@ type BookingGroupSummary = {
   cancellableBooking: Booking | null;
 };
 
+type RazorpayCheckoutOptions = {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  order_id: string;
+  handler: () => void;
+  prefill?: {
+    name?: string;
+    email?: string;
+  };
+  theme?: {
+    color?: string;
+  };
+};
+
+type RazorpayConstructor = new (options: RazorpayCheckoutOptions) => {
+  open: () => void;
+};
+
+declare global {
+  interface Window {
+    Razorpay?: RazorpayConstructor;
+  }
+}
+
 const initialWorkspaceForm: WorkspaceForm = {
   title: "",
   description: "",
@@ -154,6 +181,33 @@ function dashboardForRole(role: TokenResponse["user"]["role"]): DashboardTab {
     return "host";
   }
   return "worker";
+}
+
+function loadRazorpayCheckout() {
+  if (typeof window === "undefined") {
+    return Promise.reject(new Error("Checkout is only available in the browser."));
+  }
+  if (window.Razorpay) {
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve, reject) => {
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      'script[src="https://checkout.razorpay.com/v1/checkout.js"]',
+    );
+    if (existingScript) {
+      existingScript.addEventListener("load", () => resolve(), { once: true });
+      existingScript.addEventListener("error", () => reject(new Error("Could not load Razorpay Checkout.")), {
+        once: true,
+      });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Could not load Razorpay Checkout."));
+    document.body.appendChild(script);
+  });
 }
 
 function toDateInputValue(date: Date) {
@@ -863,6 +917,44 @@ export default function Home() {
         session.access_token,
         booking.booking_group_id,
       );
+      if (checkoutSession.provider === "razorpay") {
+        const payload = checkoutSession.checkout_payload;
+        const orderId = typeof payload.order_id === "string" ? payload.order_id : "";
+        const keyId = typeof payload.key_id === "string" ? payload.key_id : "";
+        const amount = typeof payload.amount === "number" ? payload.amount : Number(payload.amount);
+        const currency = typeof payload.currency === "string" ? payload.currency : checkoutSession.currency;
+        if (!orderId || !keyId || Number.isNaN(amount)) {
+          throw new Error("Razorpay checkout details are incomplete.");
+        }
+        await loadRazorpayCheckout();
+        const Razorpay = window.Razorpay;
+        if (!Razorpay) {
+          throw new Error("Razorpay Checkout is unavailable.");
+        }
+        const checkout = new Razorpay({
+          key: keyId,
+          amount,
+          currency,
+          name: "Hybrid Stay Booking",
+          description: `${checkoutSession.payments.length} rota day${
+            checkoutSession.payments.length === 1 ? "" : "s"
+          }`,
+          order_id: orderId,
+          prefill: {
+            name: session.user.full_name,
+            email: session.user.email,
+          },
+          theme: {
+            color: "#147d64",
+          },
+          handler: () => {
+            setMessage("Payment submitted. Your booking will confirm after Razorpay sends the webhook.");
+            void refreshBookings(session.access_token);
+          },
+        });
+        checkout.open();
+        return;
+      }
       if (checkoutSession.provider !== "mock") {
         setMessage(
           `Checkout started with ${checkoutSession.provider}. Payment will confirm after the provider webhook completes.`,

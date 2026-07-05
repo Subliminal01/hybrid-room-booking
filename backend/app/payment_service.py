@@ -1,9 +1,11 @@
 import hashlib
 import hmac
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
+from typing import Any
 from uuid import UUID, uuid4
 
+import httpx
 from sqlmodel import Session, select
 
 from app.config import get_settings
@@ -12,6 +14,11 @@ from app.models import Booking, Payment, PaymentStatus, Workspace
 
 MOCK_PAYMENT_PROVIDER = "mock"
 DEV_MOCK_WEBHOOK_SECRET = "dev-mock-webhook-secret"
+RAZORPAY_ORDERS_URL = "https://api.razorpay.com/v1/orders"
+
+
+class PaymentProviderError(RuntimeError):
+    pass
 
 
 def provider_reference(provider: str = MOCK_PAYMENT_PROVIDER) -> str:
@@ -36,6 +43,98 @@ def checkout_url(booking_group_id: UUID, checkout_reference: str, provider: str)
 
 def total_payment_amount(payments: list[Payment]) -> Decimal:
     return sum((payment.amount for payment in payments), Decimal("0.00"))
+
+
+def amount_to_minor_units(amount: Decimal) -> int:
+    return int((amount * Decimal("100")).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def existing_checkout_reference(payments: list[Payment]) -> str | None:
+    references = {
+        payment.provider_checkout_reference
+        for payment in payments
+        if payment.provider_checkout_reference
+    }
+    if len(references) == 1:
+        return references.pop()
+    return None
+
+
+def create_razorpay_order(
+    *,
+    booking_group_id: UUID,
+    checkout_reference: str,
+    payments: list[Payment],
+) -> dict[str, Any]:
+    settings = get_settings()
+    if not settings.razorpay_key_id or not settings.razorpay_key_secret:
+        raise PaymentProviderError("Razorpay credentials are not configured")
+
+    amount = total_payment_amount(payments)
+    currency = payments[0].currency if payments else "INR"
+    payload = {
+        "amount": amount_to_minor_units(amount),
+        "currency": currency,
+        "receipt": checkout_reference[:40],
+        "notes": {
+            "booking_group_id": str(booking_group_id),
+            "checkout_reference": checkout_reference,
+            "payment_ids": ",".join(str(payment.id) for payment in payments),
+        },
+    }
+    try:
+        response = httpx.post(
+            RAZORPAY_ORDERS_URL,
+            auth=(settings.razorpay_key_id, settings.razorpay_key_secret),
+            json=payload,
+            timeout=10.0,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise PaymentProviderError("Could not create Razorpay order") from exc
+    return response.json()
+
+
+def prepare_provider_checkout(
+    *,
+    session: Session,
+    booking_group_id: UUID,
+    payments: list[Payment],
+    checkout_reference: str,
+) -> dict[str, Any]:
+    provider = payments[0].provider if payments else "mock"
+    if provider != "razorpay":
+        return {}
+
+    existing_reference = existing_checkout_reference(payments)
+    if existing_reference:
+        return {
+            "key_id": get_settings().razorpay_key_id,
+            "order_id": existing_reference,
+            "amount": amount_to_minor_units(total_payment_amount(payments)),
+            "currency": payments[0].currency if payments else "INR",
+        }
+
+    order = create_razorpay_order(
+        booking_group_id=booking_group_id,
+        checkout_reference=checkout_reference,
+        payments=payments,
+    )
+    order_id = order.get("id")
+    if not isinstance(order_id, str) or not order_id:
+        raise PaymentProviderError("Razorpay order response did not include an id")
+    for payment in payments:
+        payment.provider_checkout_reference = order_id
+        session.add(payment)
+    session.commit()
+    for payment in payments:
+        session.refresh(payment)
+    return {
+        "key_id": get_settings().razorpay_key_id,
+        "order_id": order_id,
+        "amount": order.get("amount", amount_to_minor_units(total_payment_amount(payments))),
+        "currency": order.get("currency", payments[0].currency if payments else "INR"),
+    }
 
 
 def payment_webhook_secret(provider: str) -> str | None:

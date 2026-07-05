@@ -40,6 +40,14 @@ def mock_webhook_signature(payload: bytes) -> str:
     ).hexdigest()
 
 
+def razorpay_webhook_signature(payload: bytes) -> str:
+    return hmac.new(
+        b"rzp_webhook_secret",
+        payload,
+        hashlib.sha256,
+    ).hexdigest()
+
+
 def register_user(client: TestClient, *, email: str, role: str = "worker") -> dict:
     if role == "admin":
         session_override = app.dependency_overrides[get_session]
@@ -436,6 +444,145 @@ def test_booking_group_checkout_session_reuses_pending_payments():
     ]
 
     app.dependency_overrides.clear()
+
+
+def test_razorpay_checkout_session_creates_order(monkeypatch):
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "id": "order_test_123",
+                "amount": 170000,
+                "currency": "INR",
+            }
+
+    requests = []
+
+    def fake_post(url, *, auth, json, timeout):
+        requests.append({"url": url, "auth": auth, "json": json, "timeout": timeout})
+        return FakeResponse()
+
+    monkeypatch.setenv("PAYMENT_PROVIDER", "razorpay")
+    monkeypatch.setenv("RAZORPAY_KEY_ID", "rzp_test_key")
+    monkeypatch.setenv("RAZORPAY_KEY_SECRET", "rzp_test_secret")
+    monkeypatch.setenv("RAZORPAY_WEBHOOK_SECRET", "rzp_webhook_secret")
+    reset_settings_cache()
+    monkeypatch.setattr("app.payment_service.httpx.post", fake_post)
+    app.dependency_overrides[get_session] = make_session_override()
+    client = TestClient(app)
+    host = register_user(client, email="host@example.com", role="host")
+    worker = register_user(client, email="worker@example.com")
+    workspace = create_workspace(client, host_token=host["access_token"])
+    booking_response = client.post(
+        "/bookings",
+        json=booking_payload(workspace["id"]),
+        headers={"Authorization": f"Bearer {worker['access_token']}"},
+    )
+    booking_group_id = booking_response.json()["bookings"][0]["booking_group_id"]
+
+    response = client.post(
+        f"/booking-groups/{booking_group_id}/checkout-session",
+        headers={"Authorization": f"Bearer {worker['access_token']}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "razorpay"
+    assert body["checkout_payload"] == {
+        "key_id": "rzp_test_key",
+        "order_id": "order_test_123",
+        "amount": 170000,
+        "currency": "INR",
+    }
+    assert {payment["provider_checkout_reference"] for payment in body["payments"]} == {
+        "order_test_123"
+    }
+    assert requests[0]["url"] == "https://api.razorpay.com/v1/orders"
+    assert requests[0]["auth"] == ("rzp_test_key", "rzp_test_secret")
+    assert requests[0]["json"]["amount"] == 170000
+    assert requests[0]["json"]["currency"] == "INR"
+    assert requests[0]["json"]["notes"]["booking_group_id"] == booking_group_id
+
+    app.dependency_overrides.clear()
+    reset_settings_cache()
+
+
+def test_razorpay_webhook_confirms_all_rota_days(monkeypatch):
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "id": "order_test_group",
+                "amount": 170000,
+                "currency": "INR",
+            }
+
+    monkeypatch.setenv("PAYMENT_PROVIDER", "razorpay")
+    monkeypatch.setenv("RAZORPAY_KEY_ID", "rzp_test_key")
+    monkeypatch.setenv("RAZORPAY_KEY_SECRET", "rzp_test_secret")
+    monkeypatch.setenv("RAZORPAY_WEBHOOK_SECRET", "rzp_webhook_secret")
+    reset_settings_cache()
+    monkeypatch.setattr(
+        "app.payment_service.httpx.post",
+        lambda url, *, auth, json, timeout: FakeResponse(),
+    )
+    app.dependency_overrides[get_session] = make_session_override()
+    client = TestClient(app)
+    host = register_user(client, email="host@example.com", role="host")
+    worker = register_user(client, email="worker@example.com")
+    workspace = create_workspace(client, host_token=host["access_token"])
+    booking_response = client.post(
+        "/bookings",
+        json=booking_payload(workspace["id"]),
+        headers={"Authorization": f"Bearer {worker['access_token']}"},
+    )
+    bookings = booking_response.json()["bookings"]
+    booking_group_id = bookings[0]["booking_group_id"]
+    checkout_response = client.post(
+        f"/booking-groups/{booking_group_id}/checkout-session",
+        headers={"Authorization": f"Bearer {worker['access_token']}"},
+    )
+    assert checkout_response.status_code == 200
+    payload = json.dumps(
+        {
+            "event": "payment.captured",
+            "payload": {
+                "payment": {
+                    "entity": {
+                        "id": "pay_test_group",
+                        "order_id": "order_test_group",
+                    },
+                },
+            },
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+    response = client.post(
+        "/payments/webhooks/razorpay",
+        content=payload,
+        headers={
+            "Content-Type": "application/json",
+            "X-Razorpay-Signature": razorpay_webhook_signature(payload),
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["processed"] is True
+    for booking in bookings:
+        history_response = client.get(
+            f"/bookings/{booking['id']}",
+            headers={"Authorization": f"Bearer {worker['access_token']}"},
+        )
+        assert history_response.status_code == 200
+        assert history_response.json()["status"] == "confirmed"
+
+    app.dependency_overrides.clear()
+    reset_settings_cache()
 
 
 def test_payment_webhook_confirms_signed_payment_success():

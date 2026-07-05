@@ -256,7 +256,9 @@ Payment success and failure should be confirmed through the provider webhook end
 `POST /payments/webhooks/{provider}`. The endpoint verifies the provider
 signature before marking a payment as succeeded or failed. `payment.succeeded`
 confirms its booking; `payment.failed` leaves the booking pending so the worker
-can retry checkout.
+can retry checkout. Razorpay checkout uses Orders; send Razorpay webhooks to
+`/payments/webhooks/razorpay` and enable `payment.captured` plus
+`payment.failed`.
 Mock/dev webhooks use `X-Mock-Signature`; Razorpay uses
 `X-Razorpay-Signature`; Stripe uses `Stripe-Signature`.
 

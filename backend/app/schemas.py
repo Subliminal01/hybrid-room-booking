@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -336,6 +337,7 @@ class PaymentResponse(BaseModel):
     status: PaymentStatus
     provider: str
     provider_reference: str
+    provider_checkout_reference: str | None = None
     paid_at: datetime | None
     refunded_at: datetime | None
 
@@ -348,6 +350,7 @@ class PaymentCheckoutSessionResponse(BaseModel):
     provider: str
     checkout_reference: str
     checkout_url: str
+    checkout_payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class PaymentWebhookResponse(BaseModel):

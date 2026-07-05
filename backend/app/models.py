@@ -297,6 +297,7 @@ class Payment(TimestampedModel, table=True):
     __table_args__ = (
         CheckConstraint("amount >= 0", name="ck_payments_amount_non_negative"),
         Index("ix_payments_booking_status", "booking_id", "status"),
+        Index("ix_payments_provider_checkout_reference", "provider_checkout_reference"),
     )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True, index=True)
@@ -313,6 +314,7 @@ class Payment(TimestampedModel, table=True):
     )
     provider: str = Field(default="mock", nullable=False, max_length=40)
     provider_reference: str = Field(nullable=False, unique=True, index=True, max_length=120)
+    provider_checkout_reference: Optional[str] = Field(default=None, max_length=120)
     paid_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True)))
     refunded_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True)))
 
