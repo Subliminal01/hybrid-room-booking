@@ -150,7 +150,8 @@ button {
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea {
   width: 100%;
   min-height: 42px;
   border: 1px solid var(--line);
@@ -158,10 +159,17 @@ button {
   padding: 9px 10px;
   background: #fff;
   color: var(--text);
+  font: inherit;
+}
+
+.field textarea {
+  min-height: 84px;
+  resize: vertical;
 }
 
 .field input:focus,
-.field select:focus {
+.field select:focus,
+.field textarea:focus {
   outline: 2px solid rgba(20, 125, 100, 0.22);
   border-color: var(--accent);
 }
@@ -264,6 +272,7 @@ button {
 .btn:disabled,
 .tab:disabled,
 .icon-button:disabled,
+.amenity-toggle:disabled,
 .day-toggle:disabled {
   cursor: not-allowed;
   opacity: 0.58;
@@ -524,6 +533,50 @@ button {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.host-onboarding-note,
+.host-form-section {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  padding: 12px;
+}
+
+.host-onboarding-note {
+  color: #2d5148;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.host-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #fff;
+}
+
+.amenity-toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.amenity-toggle {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--muted);
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.amenity-toggle.active {
+  border-color: rgba(20, 125, 100, 0.35);
+  background: var(--panel-2);
+  color: var(--accent-dark);
 }
 
 .auth-divider {

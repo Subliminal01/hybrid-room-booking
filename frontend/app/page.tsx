@@ -72,7 +72,10 @@ type WorkspaceForm = {
   state: string;
   photoUrl: string;
   dailyPrice: string;
-  amenities: string;
+  amenities: string[];
+  availabilityDays: number[];
+  availabilityStart: string;
+  availabilityEnd: string;
 };
 
 type AvailabilityDraft = {
@@ -115,15 +118,17 @@ type BookingGroupSummary = {
 };
 
 const initialWorkspaceForm: WorkspaceForm = {
-  title: "Koramangala focus room",
-  description: "Quiet room with desk, Wi-Fi and easy metro access.",
-  addressLine: "12 Residency Road",
+  title: "",
+  description: "",
+  addressLine: "",
   city: "Bengaluru",
   state: "Karnataka",
-  photoUrl:
-    "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1200&q=80",
-  dailyPrice: "850.00",
-  amenities: "wifi,desk,ac",
+  photoUrl: "",
+  dailyPrice: "",
+  amenities: ["wifi", "desk"],
+  availabilityDays: [0, 1, 2, 3, 4],
+  availabilityStart: "09:00",
+  availabilityEnd: "18:00",
 };
 
 const SESSION_STORAGE_KEY = "hybrid-stay-session";
@@ -132,6 +137,14 @@ const BOOKING_PAGE_SIZE = 10;
 const AUDIT_PAGE_SIZE = 12;
 const DEFAULT_START_TIME = "09:00";
 const DEFAULT_END_TIME = "18:00";
+const HOST_AMENITIES = [
+  { key: "wifi", label: "Wi-Fi" },
+  { key: "desk", label: "Desk" },
+  { key: "ac", label: "AC" },
+  { key: "power_backup", label: "Power backup" },
+  { key: "private_bath", label: "Private bath" },
+  { key: "parking", label: "Parking" },
+];
 
 function dashboardForRole(role: TokenResponse["user"]["role"]): DashboardTab {
   if (role === "admin") {
@@ -1025,35 +1038,69 @@ export default function Home() {
       setError("Daily price must be greater than zero.");
       return;
     }
+    if (workspaceForm.availabilityDays.length === 0) {
+      setError("Choose at least one available weekday.");
+      return;
+    }
+    if (workspaceForm.availabilityEnd <= workspaceForm.availabilityStart) {
+      setError("Availability end time must be after start time.");
+      return;
+    }
     await runAction(async () => {
       const amenities = Object.fromEntries(
         workspaceForm.amenities
-          .split(",")
-          .map((amenity) => amenity.trim())
-          .filter(Boolean)
           .map((amenity) => [amenity, true]),
       );
       const created = await createWorkspace(session.access_token, {
-        title: workspaceForm.title,
-        description: workspaceForm.description,
-        address_line: workspaceForm.addressLine,
-        city: workspaceForm.city,
-        state: workspaceForm.state,
-        photo_url: workspaceForm.photoUrl || undefined,
-        daily_price: workspaceForm.dailyPrice,
+        title: workspaceForm.title.trim(),
+        description: workspaceForm.description.trim() || undefined,
+        address_line: workspaceForm.addressLine.trim(),
+        city: workspaceForm.city.trim(),
+        state: workspaceForm.state.trim() || undefined,
+        photo_url: workspaceForm.photoUrl.trim() || undefined,
+        daily_price: workspaceForm.dailyPrice.trim(),
         amenities,
       });
-      setHostWorkspaces((current) => [created, ...current]);
+      const rules = await replaceWorkspaceAvailability(
+        session.access_token,
+        created.id,
+        workspaceForm.availabilityDays.map((day) => ({
+          day_of_week: day,
+          start_time: workspaceForm.availabilityStart,
+          end_time: workspaceForm.availabilityEnd,
+        })),
+      );
+      const createdWithAvailability = { ...created, availability_rules: rules };
+      setHostWorkspaces((current) => [createdWithAvailability, ...current]);
       setAvailabilityDrafts((current) => ({
         ...current,
-        [created.id]: draftFromRules(created.availability_rules),
+        [created.id]: draftFromRules(rules),
       }));
       setBlackoutDrafts((current) => ({
         ...current,
         [created.id]: draftFromBlackoutDates(created),
       }));
-      setMessage(`Created ${created.title}.`);
+      setWorkspaceForm(initialWorkspaceForm);
+      setMessage(`${created.title} was submitted for admin review.`);
     });
+  }
+
+  function toggleWorkspaceFormAmenity(amenity: string) {
+    setWorkspaceForm((current) => ({
+      ...current,
+      amenities: current.amenities.includes(amenity)
+        ? current.amenities.filter((item) => item !== amenity)
+        : [...current.amenities, amenity],
+    }));
+  }
+
+  function toggleWorkspaceFormDay(day: number) {
+    setWorkspaceForm((current) => ({
+      ...current,
+      availabilityDays: current.availabilityDays.includes(day)
+        ? current.availabilityDays.filter((selectedDay) => selectedDay !== day)
+        : [...current.availabilityDays, day].sort(),
+    }));
   }
 
   async function handleWorkspaceStatus(workspace: Workspace, statusValue: WorkspaceStatus) {
@@ -1888,17 +1935,22 @@ export default function Home() {
               <div className="panel-header">
                 <div>
                   <h2>Host Workspace Manager</h2>
-                  <div className="muted">Create and manage rooms offered to workers</div>
+                  <div className="muted">Submit rooms for review and manage worker availability</div>
                 </div>
                 <Building2 size={18} />
               </div>
               <div className="panel-body">
                 <form className="host-form" onSubmit={handleCreateWorkspace}>
+                  <div className="host-onboarding-note">
+                    New rooms stay pending until an admin approves them. Workers only see approved rooms
+                    that match their rota.
+                  </div>
                   <div className="grid-2">
                     <div className="field">
                       <label htmlFor="workspaceTitle">Title</label>
                       <input
                         id="workspaceTitle"
+                        placeholder="e.g. Koramangala focus room"
                         value={workspaceForm.title}
                         onChange={(event) =>
                           setWorkspaceForm((current) => ({
@@ -1912,6 +1964,8 @@ export default function Home() {
                       <label htmlFor="workspacePrice">Daily price</label>
                       <input
                         id="workspacePrice"
+                        inputMode="decimal"
+                        placeholder="850.00"
                         value={workspaceForm.dailyPrice}
                         onChange={(event) =>
                           setWorkspaceForm((current) => ({
@@ -1924,8 +1978,9 @@ export default function Home() {
                   </div>
                   <div className="field">
                     <label htmlFor="workspaceDescription">Description</label>
-                    <input
+                    <textarea
                       id="workspaceDescription"
+                      placeholder="Quiet room with desk, Wi-Fi and easy metro access."
                       value={workspaceForm.description}
                       onChange={(event) =>
                         setWorkspaceForm((current) => ({
@@ -1940,6 +1995,7 @@ export default function Home() {
                       <label htmlFor="workspaceAddress">Address</label>
                       <input
                         id="workspaceAddress"
+                        placeholder="12 Residency Road"
                         value={workspaceForm.addressLine}
                         onChange={(event) =>
                           setWorkspaceForm((current) => ({
@@ -1953,6 +2009,7 @@ export default function Home() {
                       <label htmlFor="workspaceCity">City</label>
                       <input
                         id="workspaceCity"
+                        placeholder="Bengaluru"
                         value={workspaceForm.city}
                         onChange={(event) =>
                           setWorkspaceForm((current) => ({
@@ -1981,6 +2038,7 @@ export default function Home() {
                       <label htmlFor="workspacePhoto">Photo URL</label>
                       <input
                         id="workspacePhoto"
+                        placeholder="https://..."
                         value={workspaceForm.photoUrl}
                         onChange={(event) =>
                           setWorkspaceForm((current) => ({
@@ -1992,22 +2050,72 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="field">
-                      <label htmlFor="workspaceAmenities">Amenities</label>
+                    <label>Amenities</label>
+                    <div className="amenity-toggle-row">
+                      {HOST_AMENITIES.map((amenity) => (
+                        <button
+                          className={`amenity-toggle ${
+                            workspaceForm.amenities.includes(amenity.key) ? "active" : ""
+                          }`}
+                          key={amenity.key}
+                          type="button"
+                          onClick={() => toggleWorkspaceFormAmenity(amenity.key)}
+                          disabled={busy}
+                        >
+                          {amenity.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="host-form-section">
+                    <div>
+                      <strong>Weekly availability</strong>
+                      <div className="muted">Choose the days and day-use window workers can book.</div>
+                    </div>
+                    <div className="day-toggle-row" aria-label="New workspace available days">
+                      {WEEKDAYS.map((dayLabel, day) => (
+                        <button
+                          className={`day-toggle ${
+                            workspaceForm.availabilityDays.includes(day) ? "active" : ""
+                          }`}
+                          key={dayLabel}
+                          type="button"
+                          onClick={() => toggleWorkspaceFormDay(day)}
+                          disabled={busy}
+                        >
+                          {dayLabel}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="availability-time-row">
                       <input
-                        id="workspaceAmenities"
-                        value={workspaceForm.amenities}
+                        aria-label="New workspace availability start time"
+                        type="time"
+                        value={workspaceForm.availabilityStart}
                         onChange={(event) =>
                           setWorkspaceForm((current) => ({
                             ...current,
-                            amenities: event.target.value,
+                            availabilityStart: event.target.value,
+                          }))
+                        }
+                      />
+                      <input
+                        aria-label="New workspace availability end time"
+                        type="time"
+                        value={workspaceForm.availabilityEnd}
+                        onChange={(event) =>
+                          setWorkspaceForm((current) => ({
+                            ...current,
+                            availabilityEnd: event.target.value,
                           }))
                         }
                       />
                     </div>
+                  </div>
                   <div className="button-row">
                     <button className="btn" type="submit" disabled={busy}>
                       <Plus size={16} />
-                      Add workspace
+                      Submit for review
                     </button>
                     <button
                       className="btn secondary"
