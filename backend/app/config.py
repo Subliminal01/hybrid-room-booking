@@ -56,6 +56,7 @@ class Settings:
         self.app_env = getenv("APP_ENV", "development").strip().lower()
         self.database_url = normalize_database_url(getenv("DATABASE_URL", DEV_DATABASE_URL))
         self.sql_echo = getenv("SQL_ECHO") == "1"
+        self.log_level = getenv("LOG_LEVEL", "INFO").strip().upper()
         self.auth_secret_key = getenv("AUTH_SECRET_KEY", DEV_AUTH_SECRET_KEY)
         self.access_token_expire_minutes = parse_int_env("ACCESS_TOKEN_EXPIRE_MINUTES", 60)
         self.refresh_token_expire_days = parse_int_env("REFRESH_TOKEN_EXPIRE_DAYS", 30)

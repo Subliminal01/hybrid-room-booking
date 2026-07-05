@@ -1,9 +1,13 @@
+import json
+import logging
+
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 from starlette.testclient import TestClient
 
 from app.database import get_session
 from app.main import app
+from app.observability import JsonLogFormatter
 
 
 def make_session_override():
@@ -32,6 +36,44 @@ def test_request_id_header_is_returned_on_success():
     assert response.headers["X-Frame-Options"] == "DENY"
     assert response.headers["Referrer-Policy"] == "no-referrer"
     assert response.headers["Permissions-Policy"] == "camera=(), microphone=(), geolocation=()"
+
+
+def test_request_completion_log_includes_operational_fields(caplog):
+    client = TestClient(app)
+
+    with caplog.at_level(logging.INFO, logger="app.requests"):
+        response = client.get("/health", headers={"X-Request-ID": "req-log-123"})
+
+    assert response.status_code == 200
+    record = next(record for record in caplog.records if record.message == "request_complete")
+    assert record.request_id == "req-log-123"
+    assert record.method == "GET"
+    assert record.path == "/health"
+    assert record.status_code == 200
+    assert isinstance(record.duration_ms, float)
+
+
+def test_json_log_formatter_outputs_machine_readable_payload():
+    formatter = JsonLogFormatter()
+    record = logging.LogRecord(
+        name="app.requests",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg="request_complete",
+        args=(),
+        exc_info=None,
+    )
+    record.request_id = "req-json-123"
+    record.status_code = 200
+
+    payload = json.loads(formatter.format(record))
+
+    assert payload["message"] == "request_complete"
+    assert payload["logger"] == "app.requests"
+    assert payload["request_id"] == "req-json-123"
+    assert payload["status_code"] == 200
+    assert payload["timestamp"]
 
 
 def test_liveness_and_readiness_endpoints():

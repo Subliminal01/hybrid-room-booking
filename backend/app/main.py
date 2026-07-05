@@ -54,7 +54,7 @@ from app.models import (
     WorkspaceReviewStatus,
     utc_now,
 )
-from app.observability import configure_observability
+from app.observability import configure_logging, configure_observability
 from app.payment_service import (
     PaymentProviderError,
     checkout_reference_for_payments,
@@ -111,6 +111,7 @@ from app.schemas import (
 from app.security import hash_password, verify_password
 
 settings = get_settings()
+configure_logging(settings.log_level)
 app = FastAPI(title="Hybrid Room Booking API")
 app.add_middleware(
     CORSMiddleware,

@@ -21,6 +21,8 @@ services:
         value: 30
       - key: AUTH_RATE_LIMIT_PER_MINUTE
         value: 120
+      - key: LOG_LEVEL
+        value: INFO
       - key: CORS_ORIGINS
         value: https://hybrid-room-booking.vercel.app
       - key: FRONTEND_BASE_URL
