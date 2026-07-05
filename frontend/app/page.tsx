@@ -553,6 +553,7 @@ export default function Home() {
   const [workspaceForm, setWorkspaceForm] = useState<WorkspaceForm>(initialWorkspaceForm);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
   const [selectedReceipt, setSelectedReceipt] = useState<BookingGroupReceipt | null>(null);
+  const [selectedBookingGroup, setSelectedBookingGroup] = useState<BookingGroupSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -725,6 +726,8 @@ export default function Home() {
     setResetNewPassword("");
     setMyBookings([]);
     setMyBookingsTotal(0);
+    setSelectedBookingGroup(null);
+    setSelectedReceipt(null);
     setHostBookings([]);
     setHostBookingsTotal(0);
     setHostRevenue(null);
@@ -1153,6 +1156,7 @@ export default function Home() {
     await runAction(async () => {
       const cancelled = await cancelBookingGroup(session.access_token, booking.booking_group_id);
       await refreshBookings(session.access_token);
+      setSelectedBookingGroup(null);
       setMessage(
         `Cancelled ${cancelled.bookings.length} rota day${
           cancelled.bookings.length === 1 ? "" : "s"
@@ -1569,6 +1573,16 @@ export default function Home() {
     return `Cancel this rota group starting ${bookingDateRange(
       pendingConfirmation.booking,
     )}? Paid days in the group will be refunded.`;
+  }
+
+  function confirmationPolicy() {
+    if (!pendingConfirmation) {
+      return "";
+    }
+    if (pendingConfirmation.kind === "book") {
+      return "A room is held after booking creation. Payment must be completed before the hold expires. Confirmed bookings can be cancelled from booking history; eligible paid days are refunded through the original payment provider.";
+    }
+    return "Cancelling applies to the whole rota group. Refund timing depends on the payment provider and bank processing timelines.";
   }
 
   return (
@@ -2771,6 +2785,14 @@ export default function Home() {
                       </div>
                       <div>
                         <div className={`status ${group.status}`}>{group.status}</div>
+                        <button
+                          className="btn secondary"
+                          type="button"
+                          onClick={() => setSelectedBookingGroup(group)}
+                          disabled={busy}
+                        >
+                          Details
+                        </button>
                         {group.payableBooking ? (
                           <button
                             className="btn"
@@ -2807,6 +2829,68 @@ export default function Home() {
                   })
                 )}
               </div>
+              {selectedBookingGroup ? (
+                <div className="booking-detail-panel" aria-label="Booking details">
+                  <div className="panel-subheader">
+                    <div>
+                      <h3>{selectedBookingGroup.firstBooking.workspace?.title ?? "Workspace booking"}</h3>
+                      <div className="muted">
+                        {selectedBookingGroup.dayCount} rota day
+                        {selectedBookingGroup.dayCount === 1 ? "" : "s"} ·{" "}
+                        {formatMoney(selectedBookingGroup.totalPrice)}
+                      </div>
+                    </div>
+                    <span className={`status ${selectedBookingGroup.status}`}>
+                      {selectedBookingGroup.status}
+                    </span>
+                  </div>
+                  <div className="booking-detail-grid">
+                    {selectedBookingGroup.bookings.map((booking) => (
+                      <div className="booking-detail-day" key={booking.id}>
+                        <strong>{bookingDateRange(booking)}</strong>
+                        <span className={`status ${booking.status}`}>{booking.status}</span>
+                        {booking.expires_at && booking.status === "pending" ? (
+                          <span className="muted">Pay by {formatDateTime(booking.expires_at)}</span>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="policy-note">
+                    Confirmed bookings can be cancelled from booking history. Eligible paid days are
+                    refunded through the original payment provider; provider and bank timelines may vary.
+                  </div>
+                  <div className="button-row">
+                    {selectedBookingGroup.payableBooking ? (
+                      <button
+                        className="btn"
+                        type="button"
+                        onClick={() => handlePayBooking(selectedBookingGroup.payableBooking as Booking)}
+                        disabled={busy}
+                      >
+                        Pay now
+                      </button>
+                    ) : null}
+                    {selectedBookingGroup.cancellableBooking ? (
+                      <button
+                        className="btn secondary"
+                        type="button"
+                        onClick={() => handleCancel(selectedBookingGroup.cancellableBooking as Booking)}
+                        disabled={busy}
+                      >
+                        Cancel rota
+                      </button>
+                    ) : null}
+                    <button
+                      className="btn secondary"
+                      type="button"
+                      onClick={() => setSelectedBookingGroup(null)}
+                      disabled={busy}
+                    >
+                      Close details
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               {selectedReceipt ? (
                 <div className="receipt-panel" aria-label="Booking receipt">
                   <div>
@@ -2977,6 +3061,7 @@ export default function Home() {
           >
             <h2 id="confirmation-title">{confirmationTitle()}</h2>
             <p>{confirmationBody()}</p>
+            <p className="modal-note">{confirmationPolicy()}</p>
             <div className="button-row">
               <button
                 className={pendingConfirmation.kind === "cancel" ? "btn danger" : "btn"}

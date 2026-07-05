@@ -525,6 +525,47 @@ a:hover {
   padding: 14px;
 }
 
+.booking-detail-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.booking-detail-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.booking-detail-day {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  padding: 10px;
+}
+
+.booking-detail-day .muted {
+  grid-column: 1 / -1;
+}
+
+.policy-note,
+.modal-note {
+  border: 1px solid #f1d7a7;
+  border-radius: 8px;
+  background: #fff8e8;
+  color: var(--warning);
+  padding: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .receipt-totals {
   display: grid;
   gap: 4px;
