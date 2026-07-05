@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 from decimal import Decimal
+import re
 from typing import Any
+from urllib.parse import urlparse
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -15,6 +17,38 @@ from app.models import (
     WorkspaceReviewStatus,
     WorkspaceStatus,
 )
+
+SAFE_AMENITY_KEY_PATTERN = re.compile(r"^[a-z0-9_:-]{1,64}$")
+
+
+def normalize_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def validate_https_url(value: str | None) -> str | None:
+    value = normalize_optional_text(value)
+    if value is None:
+        return None
+    parsed = urlparse(value)
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise ValueError("photo_url must be a valid https URL")
+    return value
+
+
+def validate_amenities(value: dict | None) -> dict | None:
+    if value is None:
+        return None
+    cleaned = {}
+    for key, enabled in value.items():
+        if not isinstance(key, str) or not SAFE_AMENITY_KEY_PATTERN.fullmatch(key):
+            raise ValueError("amenity keys must use lowercase letters, numbers, _, :, or -")
+        if not isinstance(enabled, bool):
+            raise ValueError("amenity values must be booleans")
+        cleaned[key] = enabled
+    return cleaned
 
 
 class UserRegisterRequest(BaseModel):
@@ -201,6 +235,26 @@ class WorkspaceCreateRequest(BaseModel):
     status: WorkspaceStatus = WorkspaceStatus.ACTIVE
     amenities: dict = Field(default_factory=dict)
 
+    @field_validator("title", "address_line", "city", "state", "country", "postal_code", "description", mode="before")
+    @classmethod
+    def normalize_text_fields(cls, value: str | None) -> str | None:
+        return normalize_optional_text(value)
+
+    @field_validator("photo_url")
+    @classmethod
+    def validate_photo_url(cls, value: str | None) -> str | None:
+        return validate_https_url(value)
+
+    @field_validator("currency")
+    @classmethod
+    def normalize_currency(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @field_validator("amenities")
+    @classmethod
+    def validate_amenity_flags(cls, value: dict) -> dict:
+        return validate_amenities(value) or {}
+
 
 class WorkspaceUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=160)
@@ -218,6 +272,26 @@ class WorkspaceUpdateRequest(BaseModel):
     capacity: int | None = Field(default=None, ge=1)
     status: WorkspaceStatus | None = None
     amenities: dict | None = None
+
+    @field_validator("title", "address_line", "city", "state", "country", "postal_code", "description", mode="before")
+    @classmethod
+    def normalize_text_fields(cls, value: str | None) -> str | None:
+        return normalize_optional_text(value)
+
+    @field_validator("photo_url")
+    @classmethod
+    def validate_photo_url(cls, value: str | None) -> str | None:
+        return validate_https_url(value)
+
+    @field_validator("currency")
+    @classmethod
+    def normalize_currency(cls, value: str | None) -> str | None:
+        return value.strip().upper() if value is not None else None
+
+    @field_validator("amenities")
+    @classmethod
+    def validate_amenity_flags(cls, value: dict | None) -> dict | None:
+        return validate_amenities(value)
 
 
 class WorkspaceReviewRequest(BaseModel):

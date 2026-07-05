@@ -210,6 +210,64 @@ def test_host_can_update_own_workspace():
     app.dependency_overrides.clear()
 
 
+def test_workspace_photo_url_must_be_https():
+    app.dependency_overrides[get_session] = make_session_override()
+    client = TestClient(app)
+    token = register_user(client, email="host@example.com", role="host")
+
+    create_response = client.post(
+        "/workspaces",
+        json=workspace_payload(photo_url="http://example.com/workspace.jpg"),
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert create_response.status_code == 422
+
+    created = client.post(
+        "/workspaces",
+        json=workspace_payload(),
+        headers={"Authorization": f"Bearer {token}"},
+    ).json()
+    update_response = client.patch(
+        f"/workspaces/{created['id']}",
+        json={"photo_url": "javascript:alert(1)"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert update_response.status_code == 422
+
+    app.dependency_overrides.clear()
+
+
+def test_workspace_amenities_must_be_flat_boolean_flags():
+    app.dependency_overrides[get_session] = make_session_override()
+    client = TestClient(app)
+    token = register_user(client, email="host@example.com", role="host")
+
+    create_response = client.post(
+        "/workspaces",
+        json=workspace_payload(amenities={"wifi": {"nested": True}}),
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert create_response.status_code == 422
+
+    created = client.post(
+        "/workspaces",
+        json=workspace_payload(),
+        headers={"Authorization": f"Bearer {token}"},
+    ).json()
+    update_response = client.patch(
+        f"/workspaces/{created['id']}",
+        json={"amenities": {"wifi": True, "bad key": True}},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert update_response.status_code == 422
+
+    app.dependency_overrides.clear()
+
+
 def test_host_can_replace_workspace_availability():
     app.dependency_overrides[get_session] = make_session_override()
     client = TestClient(app)
