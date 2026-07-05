@@ -78,6 +78,17 @@ type WorkspaceForm = {
   availabilityEnd: string;
 };
 
+type ListingEditDraft = {
+  title: string;
+  description: string;
+  addressLine: string;
+  city: string;
+  state: string;
+  photoUrl: string;
+  dailyPrice: string;
+  amenities: string[];
+};
+
 type AvailabilityDraft = {
   days: number[];
   start: string;
@@ -181,6 +192,29 @@ function dashboardForRole(role: TokenResponse["user"]["role"]): DashboardTab {
     return "host";
   }
   return "worker";
+}
+
+function amenitiesFromRecord(amenities: Record<string, unknown> = {}) {
+  return Object.entries(amenities)
+    .filter(([, value]) => Boolean(value))
+    .map(([key]) => key);
+}
+
+function amenitiesToRecord(amenities: string[]) {
+  return Object.fromEntries(amenities.map((amenity) => [amenity, true]));
+}
+
+function listingDraftFromWorkspace(workspace: Workspace): ListingEditDraft {
+  return {
+    title: workspace.title,
+    description: workspace.description ?? "",
+    addressLine: workspace.address_line,
+    city: workspace.city,
+    state: workspace.state ?? "",
+    photoUrl: workspace.photo_url ?? "",
+    dailyPrice: workspace.daily_price,
+    amenities: amenitiesFromRecord(workspace.amenities),
+  };
 }
 
 function loadRazorpayCheckout() {
@@ -515,6 +549,7 @@ export default function Home() {
   const [auditEventsTotal, setAuditEventsTotal] = useState(0);
   const [availabilityDrafts, setAvailabilityDrafts] = useState<Record<string, AvailabilityDraft>>({});
   const [blackoutDrafts, setBlackoutDrafts] = useState<Record<string, BlackoutDraft>>({});
+  const [listingDrafts, setListingDrafts] = useState<Record<string, ListingEditDraft>>({});
   const [workspaceForm, setWorkspaceForm] = useState<WorkspaceForm>(initialWorkspaceForm);
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
   const [selectedReceipt, setSelectedReceipt] = useState<BookingGroupReceipt | null>(null);
@@ -596,6 +631,18 @@ export default function Home() {
       for (const workspace of hostWorkspaces) {
         if (!next[workspace.id]) {
           next[workspace.id] = draftFromBlackoutDates(workspace);
+        }
+      }
+      return next;
+    });
+  }, [hostWorkspaces]);
+
+  useEffect(() => {
+    setListingDrafts((current) => {
+      const next = { ...current };
+      for (const workspace of hostWorkspaces) {
+        if (!next[workspace.id]) {
+          next[workspace.id] = listingDraftFromWorkspace(workspace);
         }
       }
       return next;
@@ -685,6 +732,7 @@ export default function Home() {
     setReviewWorkspaces([]);
     setAuditEvents([]);
     setAuditEventsTotal(0);
+    setListingDrafts({});
     setResults([]);
     setActiveTab("worker");
   }
@@ -1193,6 +1241,74 @@ export default function Home() {
         ? current.availabilityDays.filter((selectedDay) => selectedDay !== day)
         : [...current.availabilityDays, day].sort(),
     }));
+  }
+
+  function updateListingDraft(workspaceId: string, patch: Partial<ListingEditDraft>) {
+    setListingDrafts((current) => {
+      const baseDraft = current[workspaceId];
+      const workspace = hostWorkspaces.find((item) => item.id === workspaceId);
+      if (!baseDraft && !workspace) {
+        return current;
+      }
+      const nextDraft = baseDraft ?? listingDraftFromWorkspace(workspace!);
+      return {
+        ...current,
+        [workspaceId]: {
+          ...nextDraft,
+          ...patch,
+        },
+      };
+    });
+  }
+
+  function toggleListingDraftAmenity(workspace: Workspace, amenity: string) {
+    const draft = listingDrafts[workspace.id] ?? listingDraftFromWorkspace(workspace);
+    updateListingDraft(workspace.id, {
+      amenities: draft.amenities.includes(amenity)
+        ? draft.amenities.filter((item) => item !== amenity)
+        : [...draft.amenities, amenity],
+    });
+  }
+
+  async function handleSaveListingDetails(workspace: Workspace) {
+    if (!session) {
+      return;
+    }
+    const draft = listingDrafts[workspace.id] ?? listingDraftFromWorkspace(workspace);
+    if (!draft.title.trim() || !draft.addressLine.trim() || !draft.city.trim()) {
+      setError("Workspace title, address, and city are required.");
+      return;
+    }
+    if (Number(draft.dailyPrice) <= 0 || Number.isNaN(Number(draft.dailyPrice))) {
+      setError("Daily price must be greater than zero.");
+      return;
+    }
+    await runAction(async () => {
+      const updated = await updateWorkspace(session.access_token, workspace.id, {
+        title: draft.title.trim(),
+        description: draft.description.trim() || undefined,
+        address_line: draft.addressLine.trim(),
+        city: draft.city.trim(),
+        state: draft.state.trim() || undefined,
+        photo_url: draft.photoUrl.trim() || null,
+        daily_price: draft.dailyPrice.trim(),
+        amenities: amenitiesToRecord(draft.amenities),
+      });
+      const merged = {
+        ...workspace,
+        ...updated,
+        availability_rules: updated.availability_rules ?? workspace.availability_rules,
+        blackout_dates: updated.blackout_dates ?? workspace.blackout_dates,
+      };
+      setHostWorkspaces((current) =>
+        current.map((item) => (item.id === workspace.id ? merged : item)),
+      );
+      setListingDrafts((current) => ({
+        ...current,
+        [workspace.id]: listingDraftFromWorkspace(merged),
+      }));
+      setMessage(`${updated.title} details updated.`);
+    });
   }
 
   async function handleWorkspaceStatus(workspace: Workspace, statusValue: WorkspaceStatus) {
@@ -2225,7 +2341,9 @@ export default function Home() {
                   {hostWorkspaces.length === 0 ? (
                     <div className="muted">Your workspace listings will appear here.</div>
                   ) : (
-                    hostWorkspaces.map((workspace) => (
+                    hostWorkspaces.map((workspace) => {
+                      const listingDraft = listingDrafts[workspace.id] ?? listingDraftFromWorkspace(workspace);
+                      return (
                       <div className="workspace-row" key={workspace.id}>
                         <div className="workspace-thumb" aria-hidden="true">
                           {workspace.photo_url ? (
@@ -2247,6 +2365,113 @@ export default function Home() {
                           </div>
                           <div className={`status review-${workspace.review_status ?? "pending"}`}>
                             Review: {workspace.review_status ?? "pending"}
+                          </div>
+                          <div className="listing-editor">
+                            <div className="grid-2">
+                              <div className="field">
+                                <label htmlFor={`listing-title-${workspace.id}`}>Title</label>
+                                <input
+                                  id={`listing-title-${workspace.id}`}
+                                  value={listingDraft.title}
+                                  onChange={(event) =>
+                                    updateListingDraft(workspace.id, { title: event.target.value })
+                                  }
+                                />
+                              </div>
+                              <div className="field">
+                                <label htmlFor={`listing-price-${workspace.id}`}>Daily price</label>
+                                <input
+                                  id={`listing-price-${workspace.id}`}
+                                  inputMode="decimal"
+                                  value={listingDraft.dailyPrice}
+                                  onChange={(event) =>
+                                    updateListingDraft(workspace.id, { dailyPrice: event.target.value })
+                                  }
+                                />
+                              </div>
+                            </div>
+                            <div className="field">
+                              <label htmlFor={`listing-description-${workspace.id}`}>Description</label>
+                              <textarea
+                                id={`listing-description-${workspace.id}`}
+                                value={listingDraft.description}
+                                onChange={(event) =>
+                                  updateListingDraft(workspace.id, { description: event.target.value })
+                                }
+                              />
+                            </div>
+                            <div className="grid-2">
+                              <div className="field">
+                                <label htmlFor={`listing-address-${workspace.id}`}>Address</label>
+                                <input
+                                  id={`listing-address-${workspace.id}`}
+                                  value={listingDraft.addressLine}
+                                  onChange={(event) =>
+                                    updateListingDraft(workspace.id, { addressLine: event.target.value })
+                                  }
+                                />
+                              </div>
+                              <div className="field">
+                                <label htmlFor={`listing-city-${workspace.id}`}>City</label>
+                                <input
+                                  id={`listing-city-${workspace.id}`}
+                                  value={listingDraft.city}
+                                  onChange={(event) =>
+                                    updateListingDraft(workspace.id, { city: event.target.value })
+                                  }
+                                />
+                              </div>
+                            </div>
+                            <div className="grid-2">
+                              <div className="field">
+                                <label htmlFor={`listing-state-${workspace.id}`}>State</label>
+                                <input
+                                  id={`listing-state-${workspace.id}`}
+                                  value={listingDraft.state}
+                                  onChange={(event) =>
+                                    updateListingDraft(workspace.id, { state: event.target.value })
+                                  }
+                                />
+                              </div>
+                              <div className="field">
+                                <label htmlFor={`listing-photo-${workspace.id}`}>Photo URL</label>
+                                <input
+                                  id={`listing-photo-${workspace.id}`}
+                                  value={listingDraft.photoUrl}
+                                  onChange={(event) =>
+                                    updateListingDraft(workspace.id, { photoUrl: event.target.value })
+                                  }
+                                />
+                              </div>
+                            </div>
+                            <div className="field">
+                              <label>Amenities</label>
+                              <div className="amenity-toggle-row">
+                                {HOST_AMENITIES.map((amenity) => (
+                                  <button
+                                    className={`amenity-toggle ${
+                                      listingDraft.amenities.includes(amenity.key) ? "active" : ""
+                                    }`}
+                                    key={amenity.key}
+                                    type="button"
+                                    onClick={() => toggleListingDraftAmenity(workspace, amenity.key)}
+                                    disabled={busy}
+                                  >
+                                    {amenity.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="button-row">
+                              <button
+                                className="btn secondary"
+                                type="button"
+                                onClick={() => handleSaveListingDetails(workspace)}
+                                disabled={busy}
+                              >
+                                Save listing details
+                              </button>
+                            </div>
                           </div>
                           <div className="availability-editor">
                             <div className="day-toggle-row" aria-label={`${workspace.title} available days`}>
@@ -2385,7 +2610,8 @@ export default function Home() {
                           </button>
                         </div>
                       </div>
-                    ))
+                    );
+                    })
                   )}
                 </div>
               </div>
