@@ -416,7 +416,7 @@ def request_email_verification(
     session: Session = Depends(get_session),
 ) -> EmailVerificationRequestResponse:
     user, token = request_email_verification_token(session, current_user)
-    dev_token = get_email_service().send_email_verification(user, token)
+    dev_token = get_email_service(settings).send_email_verification(user, token)
     return EmailVerificationRequestResponse(
         message="Email verification instructions sent",
         verification_token=dev_token,
@@ -446,7 +446,7 @@ def request_password_reset(
     dev_token = None
     if token_result is not None:
         user, token = token_result
-        dev_token = get_email_service().send_password_reset(user, token)
+        dev_token = get_email_service(settings).send_password_reset(user, token)
     return PasswordResetRequestResponse(
         message="If the email is registered, password reset instructions have been sent",
         reset_token=dev_token,

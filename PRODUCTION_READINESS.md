@@ -1,6 +1,6 @@
 # Production Readiness Summary
 
-Last verified: 2026-06-30
+Last verified: 2026-07-06
 
 ## Status
 
@@ -13,11 +13,12 @@ payment-provider credentials, live domains, and provider webhook validation.
 - FastAPI backend with SQLModel models, Alembic migrations, and PostgreSQL
   overlap protection for bookings.
 - Worker, host, and admin authentication flows with access/refresh tokens.
-- Email verification and password reset service boundaries.
+- Email verification and password reset service boundaries with SMTP delivery support.
 - Workspace listing, host availability, blackout dates, and admin moderation.
 - Rota-based workspace search and multi-day booking groups.
 - Idempotent booking creation and stale pending-booking expiry.
 - Booking history, cancellation, receipts, host revenue, and admin audit logs.
+- Log and SMTP email-provider modes.
 - Mock, Razorpay, and Stripe payment-provider boundaries.
 - Signed payment webhook handling for success and failure events.
 - Production configuration checks for strong secrets, HTTPS origins, PostgreSQL,
@@ -42,6 +43,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 - Set production backend environment values from `backend/.env.example`.
 - Set `NEXT_PUBLIC_API_BASE_URL` for the deployed frontend.
 - Configure Razorpay or Stripe sandbox/live credentials.
+- Configure SMTP transactional-email credentials.
 - Configure provider webhook URL:
   `POST https://your-api.example.com/payments/webhooks/{provider}`.
 - Complete one payment-provider sandbox transaction and verify the signed
@@ -50,6 +52,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 
 ## Current Completion Estimate
 
-The application is about 99% complete for MVP production readiness. The final
-1% depends on external deployment infrastructure and payment-provider sandbox
-validation.
+The application is about 90% complete for MVP production readiness. The
+remaining work is mostly external setup and validation: real payment credentials,
+SMTP credentials, uptime/error monitoring, browser E2E coverage, image upload,
+and admin operations polish.

@@ -31,6 +31,13 @@ AUTH_SECRET_KEY=<long-random-secret>
 CORS_ORIGINS=https://your-frontend.example.com
 FRONTEND_BASE_URL=https://your-frontend.example.com
 EMAIL_FROM=noreply@your-domain.example
+EMAIL_PROVIDER=smtp
+SMTP_HOST=<smtp-host>
+SMTP_PORT=587
+SMTP_USERNAME=<smtp-username>
+SMTP_PASSWORD=<smtp-password>
+SMTP_USE_TLS=1
+SMTP_USE_SSL=0
 PAYMENT_PROVIDER=razorpay
 ```
 
@@ -51,13 +58,16 @@ STRIPE_WEBHOOK_SECRET=<webhook-secret>
 ```
 
 Production rejects weak auth secrets, non-PostgreSQL databases, insecure CORS
-origins, non-HTTPS frontend URLs, and mock payments unless explicitly allowed
-for a staging/demo environment.
+origins, non-HTTPS frontend URLs, log-only emails, and mock payments unless
+explicitly allowed for a staging/demo environment.
 
 For a free demo deployment, use a free external PostgreSQL provider such as Neon
 or Supabase and set `DATABASE_URL` manually in the backend host. Keep
 `PAYMENT_PROVIDER=mock` with `ALLOW_MOCK_PAYMENTS_IN_PRODUCTION=1` only for demo
 validation, then switch to Razorpay or Stripe before accepting real payments.
+Similarly, `EMAIL_PROVIDER=log` with `ALLOW_LOG_EMAIL_IN_PRODUCTION=1` is only
+for demo validation. Switch to SMTP before relying on verification or password
+reset emails.
 
 ## 3. Frontend Environment
 

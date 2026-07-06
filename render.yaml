@@ -29,6 +29,10 @@ services:
         value: https://hybrid-room-booking.vercel.app
       - key: EMAIL_FROM
         value: noreply@hybridrooms.local
+      - key: EMAIL_PROVIDER
+        value: log
+      - key: ALLOW_LOG_EMAIL_IN_PRODUCTION
+        value: 1
       - key: PAYMENT_PROVIDER
         value: mock
       - key: ALLOW_MOCK_PAYMENTS_IN_PRODUCTION

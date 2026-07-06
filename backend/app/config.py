@@ -7,6 +7,7 @@ DEV_DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/room_b
 DEV_CORS_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000"
 PRODUCTION_ENV_NAMES = {"prod", "production"}
 SUPPORTED_PAYMENT_PROVIDERS = {"mock", "razorpay", "stripe"}
+SUPPORTED_EMAIL_PROVIDERS = {"log", "smtp"}
 WEAK_SECRET_VALUES = {
     "",
     DEV_AUTH_SECRET_KEY,
@@ -43,6 +44,13 @@ def parse_optional_env(name: str) -> str | None:
     return stripped or None
 
 
+def parse_bool_env(name: str, default: bool = False) -> bool:
+    raw_value = getenv(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def normalize_database_url(value: str) -> str:
     if value.startswith("postgres://"):
         return "postgresql+psycopg://" + value.removeprefix("postgres://")
@@ -64,6 +72,14 @@ class Settings:
         self.auth_rate_limit_per_minute = parse_int_env("AUTH_RATE_LIMIT_PER_MINUTE", 120)
         self.frontend_base_url = getenv("FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
         self.email_from = getenv("EMAIL_FROM", "noreply@hybridrooms.local")
+        self.email_provider = getenv("EMAIL_PROVIDER", "log").strip().lower()
+        self.smtp_host = parse_optional_env("SMTP_HOST")
+        self.smtp_port = parse_int_env("SMTP_PORT", 587)
+        self.smtp_username = parse_optional_env("SMTP_USERNAME")
+        self.smtp_password = parse_optional_env("SMTP_PASSWORD")
+        self.smtp_use_tls = parse_bool_env("SMTP_USE_TLS", True)
+        self.smtp_use_ssl = parse_bool_env("SMTP_USE_SSL", False)
+        self.allow_log_email_in_production = parse_bool_env("ALLOW_LOG_EMAIL_IN_PRODUCTION")
         self.payment_provider = getenv("PAYMENT_PROVIDER", "mock").strip().lower()
         self.razorpay_key_id = parse_optional_env("RAZORPAY_KEY_ID")
         self.razorpay_key_secret = parse_optional_env("RAZORPAY_KEY_SECRET")
@@ -90,6 +106,12 @@ class Settings:
                 + ", ".join(sorted(SUPPORTED_PAYMENT_PROVIDERS))
             )
 
+        if self.email_provider not in SUPPORTED_EMAIL_PROVIDERS:
+            raise ConfigError(
+                "EMAIL_PROVIDER must be one of: "
+                + ", ".join(sorted(SUPPORTED_EMAIL_PROVIDERS))
+            )
+
         if not self.is_production:
             return
 
@@ -110,6 +132,22 @@ class Settings:
 
         if not self.frontend_base_url.startswith("https://"):
             raise ConfigError("FRONTEND_BASE_URL must use https:// in production")
+
+        if self.email_provider == "log" and not self.allow_log_email_in_production:
+            raise ConfigError("EMAIL_PROVIDER cannot be log in production")
+
+        if self.email_provider == "smtp":
+            missing = [
+                name
+                for name, value in {
+                    "SMTP_HOST": self.smtp_host,
+                    "SMTP_USERNAME": self.smtp_username,
+                    "SMTP_PASSWORD": self.smtp_password,
+                }.items()
+                if not value
+            ]
+            if missing:
+                raise ConfigError(f"Missing SMTP email settings: {', '.join(missing)}")
 
         if self.payment_provider == "mock" and not self.allow_mock_payments_in_production:
             raise ConfigError("PAYMENT_PROVIDER cannot be mock in production")
