@@ -8,16 +8,19 @@
     "build": "next build",
     "typecheck": "tsc --noEmit",
     "smoke": "node scripts/smoke-test.mjs",
+    "prepare:standalone": "node scripts/prepare-standalone.mjs",
+    "e2e": "playwright test",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
+    "lucide-react": "^1.21.0",
     "next": "16.2.9",
     "react": "19.2.7",
-    "react-dom": "19.2.7",
-    "lucide-react": "^1.21.0"
+    "react-dom": "19.2.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/node": "^26.0.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

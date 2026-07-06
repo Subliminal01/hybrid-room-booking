@@ -116,9 +116,15 @@ jobs:
       - name: Build frontend
         run: pnpm run build
 
+      - name: Prepare standalone frontend assets
+        run: pnpm run prepare:standalone
+
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Smoke test frontend shell
         run: |
-          pnpm exec next start -H 127.0.0.1 -p 3000 &
+          HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js &
           server_pid=$!
           trap "kill $server_pid" EXIT
           for attempt in {1..30}; do
@@ -128,6 +134,9 @@ jobs:
             sleep 1
           done
           node scripts/smoke-test.mjs --frontend-url http://127.0.0.1:3000 --skip-backend
+
+      - name: Run browser E2E tests
+        run: pnpm run e2e
 
   docker:
     name: Docker image builds
