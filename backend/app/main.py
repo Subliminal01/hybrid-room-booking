@@ -127,7 +127,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-configure_rate_limiting(app, auth_limit_per_minute=settings.auth_rate_limit_per_minute)
+configure_rate_limiting(
+    app,
+    auth_limit_per_minute=settings.auth_rate_limit_per_minute,
+    trust_proxy_headers=settings.trust_proxy_headers,
+)
 configure_observability(app)
 
 ALLOWED_WORKSPACE_IMAGE_TYPES = {

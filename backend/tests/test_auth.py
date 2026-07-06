@@ -224,6 +224,47 @@ def test_email_verification_flow_and_reuse_rejection():
     app.dependency_overrides.clear()
 
 
+def test_new_email_verification_request_invalidates_old_token():
+    app.dependency_overrides[get_session] = make_session_override()
+    client = TestClient(app)
+    register_response = client.post(
+        "/auth/register",
+        json={
+            "email": "worker@example.com",
+            "password": "strong-password",
+            "full_name": "Hybrid Worker",
+        },
+    )
+    token = register_response.json()["access_token"]
+
+    first_request = client.post(
+        "/auth/email-verification/request",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    second_request = client.post(
+        "/auth/email-verification/request",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    old_token = first_request.json()["verification_token"]
+    new_token = second_request.json()["verification_token"]
+    assert old_token != new_token
+
+    old_confirm_response = client.post(
+        "/auth/email-verification/confirm",
+        json={"token": old_token},
+    )
+    new_confirm_response = client.post(
+        "/auth/email-verification/confirm",
+        json={"token": new_token},
+    )
+
+    assert old_confirm_response.status_code == 400
+    assert new_confirm_response.status_code == 200
+
+    app.dependency_overrides.clear()
+
+
 def test_email_verification_request_hides_token_in_production():
     app.dependency_overrides[get_session] = make_session_override()
     client = TestClient(app)
@@ -307,6 +348,46 @@ def test_password_reset_flow_revokes_old_refresh_token():
         json={"token": reset_token, "new_password": "another-strong-password"},
     )
     assert reused_response.status_code == 400
+
+    app.dependency_overrides.clear()
+
+
+def test_new_password_reset_request_invalidates_old_token():
+    app.dependency_overrides[get_session] = make_session_override()
+    client = TestClient(app)
+    client.post(
+        "/auth/register",
+        json={
+            "email": "worker@example.com",
+            "password": "strong-password",
+            "full_name": "Hybrid Worker",
+        },
+    )
+
+    first_request = client.post(
+        "/auth/password-reset/request",
+        json={"email": "worker@example.com"},
+    )
+    second_request = client.post(
+        "/auth/password-reset/request",
+        json={"email": "worker@example.com"},
+    )
+
+    old_token = first_request.json()["reset_token"]
+    new_token = second_request.json()["reset_token"]
+    assert old_token != new_token
+
+    old_confirm_response = client.post(
+        "/auth/password-reset/confirm",
+        json={"token": old_token, "new_password": "new-strong-password"},
+    )
+    new_confirm_response = client.post(
+        "/auth/password-reset/confirm",
+        json={"token": new_token, "new_password": "new-strong-password"},
+    )
+
+    assert old_confirm_response.status_code == 400
+    assert new_confirm_response.status_code == 200
 
     app.dependency_overrides.clear()
 

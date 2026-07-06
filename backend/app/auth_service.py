@@ -154,13 +154,25 @@ def issue_account_token(
     purpose: AccountTokenPurpose,
     expires_in: timedelta,
 ) -> str:
+    now = utc_now()
+    active_tokens = session.exec(
+        select(AccountToken).where(
+            AccountToken.user_id == user.id,
+            AccountToken.purpose == purpose,
+            AccountToken.used_at.is_(None),
+        )
+    ).all()
+    for token_row in active_tokens:
+        token_row.used_at = now
+        session.add(token_row)
+
     token = create_account_token()
     session.add(
         AccountToken(
             user_id=user.id,
             token_hash=hash_account_token(token),
             purpose=purpose,
-            expires_at=utc_now() + expires_in,
+            expires_at=now + expires_in,
         )
     )
     session.commit()

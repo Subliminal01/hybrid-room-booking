@@ -32,6 +32,7 @@ def test_development_allows_local_defaults(monkeypatch):
         "ACCESS_TOKEN_EXPIRE_MINUTES",
         "REFRESH_TOKEN_EXPIRE_DAYS",
         "BOOKING_HOLD_MINUTES",
+        "TRUST_PROXY_HEADERS",
         "PAYMENT_PROVIDER",
         "RAZORPAY_KEY_ID",
         "RAZORPAY_KEY_SECRET",
@@ -56,6 +57,16 @@ def test_development_allows_local_defaults(monkeypatch):
     assert settings.auth_secret_key == "dev-only-change-me"
     assert settings.payment_provider == "mock"
     assert "http://localhost:3000" in settings.cors_origins
+
+    clear_settings_cache()
+
+
+def test_rejects_invalid_proxy_header_boolean(monkeypatch):
+    clear_settings_cache()
+    monkeypatch.setenv("TRUST_PROXY_HEADERS", "maybe")
+
+    with pytest.raises(ConfigError, match="TRUST_PROXY_HEADERS"):
+        get_settings()
 
     clear_settings_cache()
 

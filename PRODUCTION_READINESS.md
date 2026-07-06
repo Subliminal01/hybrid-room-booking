@@ -26,6 +26,8 @@ payment-provider credentials, live domains, and provider webhook validation.
   and non-mock payment providers.
 - API observability with request IDs, structured errors, health checks, rate
   limiting, and security headers.
+- Account-aware auth throttling, explicit proxy-header trust, and invalidation
+  of older unused verification/reset tokens.
 - Next.js frontend dashboard for workers, hosts, and admins.
 - Dockerfiles, Docker Compose, CI workflow, deployment runbook, and smoke tests.
 

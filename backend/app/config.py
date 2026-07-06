@@ -51,6 +51,18 @@ def parse_bool_env(name: str, default: bool = False) -> bool:
     return raw_value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def parse_bool_env_strict(name: str, default: bool = False) -> bool:
+    raw_value = getenv(name)
+    if raw_value is None:
+        return default
+    normalized = raw_value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ConfigError(f"{name} must be a boolean")
+
+
 def normalize_database_url(value: str) -> str:
     if value.startswith("postgres://"):
         return "postgresql+psycopg://" + value.removeprefix("postgres://")
@@ -70,6 +82,7 @@ class Settings:
         self.refresh_token_expire_days = parse_int_env("REFRESH_TOKEN_EXPIRE_DAYS", 30)
         self.booking_hold_minutes = parse_int_env("BOOKING_HOLD_MINUTES", 30)
         self.auth_rate_limit_per_minute = parse_int_env("AUTH_RATE_LIMIT_PER_MINUTE", 120)
+        self.trust_proxy_headers = parse_bool_env_strict("TRUST_PROXY_HEADERS")
         self.upload_dir = getenv("UPLOAD_DIR", "uploads").strip() or "uploads"
         self.max_upload_bytes = parse_int_env("MAX_UPLOAD_BYTES", 5 * 1024 * 1024)
         self.public_api_base_url = parse_optional_env("PUBLIC_API_BASE_URL")

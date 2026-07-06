@@ -31,6 +31,8 @@ AUTH_SECRET_KEY=<long-random-secret>
 CORS_ORIGINS=https://your-frontend.example.com
 FRONTEND_BASE_URL=https://your-frontend.example.com
 PUBLIC_API_BASE_URL=https://your-api.example.com
+AUTH_RATE_LIMIT_PER_MINUTE=120
+TRUST_PROXY_HEADERS=1
 UPLOAD_DIR=uploads
 MAX_UPLOAD_BYTES=5242880
 EMAIL_FROM=noreply@your-domain.example
@@ -76,6 +78,11 @@ Workspace photo uploads are stored under `UPLOAD_DIR` and served from
 `/uploads`. This is acceptable for demos, but local instance storage is not
 durable on many free hosts. Before public launch, move uploads to object storage
 such as S3, Cloudflare R2, or another managed media store.
+
+`AUTH_RATE_LIMIT_PER_MINUTE` applies to sensitive auth routes by both source IP
+and normalized account email where available. Set `TRUST_PROXY_HEADERS=1` only
+when the app is behind a trusted platform proxy such as Render; otherwise leave
+it off so clients cannot spoof `X-Forwarded-For`.
 
 ## 3. Frontend Environment
 

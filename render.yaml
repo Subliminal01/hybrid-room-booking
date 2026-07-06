@@ -21,6 +21,8 @@ services:
         value: 30
       - key: AUTH_RATE_LIMIT_PER_MINUTE
         value: 120
+      - key: TRUST_PROXY_HEADERS
+        value: 1
       - key: UPLOAD_DIR
         value: uploads
       - key: MAX_UPLOAD_BYTES
