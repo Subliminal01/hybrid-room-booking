@@ -6,10 +6,15 @@ on:
       - main
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     name: Backend tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: backend
@@ -42,6 +47,7 @@ jobs:
   migrations:
     name: PostgreSQL migrations
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: backend
@@ -88,6 +94,7 @@ jobs:
   frontend:
     name: Frontend checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
@@ -137,10 +144,12 @@ jobs:
 
       - name: Run browser E2E tests
         run: pnpm run e2e
+        timeout-minutes: 5
 
   docker:
     name: Docker image builds
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
