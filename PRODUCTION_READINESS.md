@@ -28,6 +28,8 @@ payment-provider credentials, live domains, and provider webhook validation.
   limiting, and security headers.
 - Account-aware auth throttling, explicit proxy-header trust, and invalidation
   of older unused verification/reset tokens.
+- Scheduled GitHub Actions uptime monitor for deployed frontend and backend
+  readiness.
 - Next.js frontend dashboard for workers, hosts, and admins.
 - Dockerfiles, Docker Compose, CI workflow, deployment runbook, and smoke tests.
 
@@ -51,11 +53,11 @@ payment-provider credentials, live domains, and provider webhook validation.
   `POST https://your-api.example.com/payments/webhooks/{provider}`.
 - Complete one payment-provider sandbox transaction and verify the signed
   webhook confirms the booking group.
-- Run post-deploy smoke tests from `DEPLOYMENT.md`.
+- Run post-deploy smoke and uptime checks from `DEPLOYMENT.md`.
 
 ## Current Completion Estimate
 
-The application is about 90% complete for MVP production readiness. The
+The application is about 93% complete for MVP production readiness. The
 remaining work is mostly external setup and validation: real payment credentials,
-SMTP credentials, durable object storage for uploads, uptime/error monitoring,
+SMTP credentials, durable object storage for uploads, dedicated error tracing,
 browser E2E coverage, and admin operations polish.

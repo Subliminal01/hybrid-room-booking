@@ -1,0 +1,49 @@
+name: Uptime Monitor
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: uptime-monitor
+  cancel-in-progress: false
+
+jobs:
+  uptime:
+    name: Check production URLs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      FRONTEND_URL: https://hybrid-room-booking.vercel.app
+      BACKEND_READY_URL: https://hybrid-room-booking-api.onrender.com/health/ready
+    steps:
+      - name: Check frontend
+        run: |
+          status=$(curl --silent --show-error --location --max-time 20 --output /tmp/frontend.html --write-out "%{http_code}" "$FRONTEND_URL")
+          if [ "$status" -lt 200 ] || [ "$status" -ge 400 ]; then
+            echo "Frontend returned HTTP $status"
+            exit 1
+          fi
+          if ! grep -q "Hybrid Stay Booking" /tmp/frontend.html; then
+            echo "Frontend did not include expected app shell text"
+            exit 1
+          fi
+
+      - name: Check backend readiness
+        run: |
+          status=$(curl --silent --show-error --location --max-time 20 --output /tmp/backend-ready.json --write-out "%{http_code}" "$BACKEND_READY_URL")
+          if [ "$status" -ne 200 ]; then
+            echo "Backend readiness returned HTTP $status"
+            cat /tmp/backend-ready.json || true
+            exit 1
+          fi
+          python -m json.tool /tmp/backend-ready.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          body = json.loads(Path("/tmp/backend-ready.json").read_text())
+          if body.get("status") != "ready" or body.get("database") != "ok":
+              raise SystemExit(f"Unexpected backend readiness payload: {body}")
+          PY

@@ -173,7 +173,30 @@ pnpm run smoke -- --frontend-url https://your-frontend.example.com --api-url htt
 This verifies the frontend shell, baseline security headers, static assets, and
 backend readiness from the public deployment URLs.
 
-## 9. Rollback Notes
+## 9. Uptime Monitoring
+
+The repository includes `.github/workflows/uptime.yml`, a free scheduled monitor
+that checks:
+
+- `https://hybrid-room-booking.vercel.app`
+- `https://hybrid-room-booking-api.onrender.com/health/ready`
+
+It runs every 15 minutes and can be triggered manually from GitHub Actions using
+the `Uptime Monitor` workflow. GitHub will mark the workflow failed if the
+frontend shell is unavailable, the backend readiness endpoint fails, or database
+readiness is not `ok`.
+
+You can run the same check locally:
+
+```bash
+python scripts/uptime_check.py
+```
+
+This is a useful free baseline. Before a serious public launch, add a dedicated
+monitoring provider such as Better Stack, Sentry, Axiom, Grafana Cloud, or
+UptimeRobot for alert routing, incident history, and error traces.
+
+## 10. Rollback Notes
 
 - Roll back application containers first.
 - Avoid rolling back database migrations unless a migration is known to be
