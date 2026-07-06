@@ -35,6 +35,10 @@ AUTH_RATE_LIMIT_PER_MINUTE=120
 TRUST_PROXY_HEADERS=1
 UPLOAD_DIR=uploads
 MAX_UPLOAD_BYTES=5242880
+SENTRY_DSN=<sentry-backend-dsn>
+SENTRY_ENVIRONMENT=production
+SENTRY_RELEASE=<git-sha-or-release-name>
+SENTRY_TRACES_SAMPLE_RATE=0.05
 EMAIL_FROM=noreply@your-domain.example
 EMAIL_PROVIDER=smtp
 SMTP_HOST=<smtp-host>
@@ -195,6 +199,12 @@ python scripts/uptime_check.py
 This is a useful free baseline. Before a serious public launch, add a dedicated
 monitoring provider such as Better Stack, Sentry, Axiom, Grafana Cloud, or
 UptimeRobot for alert routing, incident history, and error traces.
+
+Backend error tracing is Sentry-ready. Create a Sentry Python/FastAPI project,
+then set `SENTRY_DSN` in Render. Keep `SENTRY_TRACES_SAMPLE_RATE` low in
+production, for example `0.05`, to sample performance traces without creating
+too much noise. Unhandled backend exceptions include the app request ID,
+HTTP method, and path in Sentry context.
 
 ## 10. Rollback Notes
 

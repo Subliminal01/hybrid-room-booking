@@ -2,6 +2,7 @@ import logging
 import json
 import time
 from datetime import datetime, timezone
+from typing import Any
 from uuid import uuid4
 
 from fastapi import FastAPI, Request, status
@@ -20,6 +21,7 @@ SECURITY_HEADERS = {
 }
 
 logger = logging.getLogger("app.requests")
+error_logger = logging.getLogger("app.errors")
 
 
 class JsonLogFormatter(logging.Formatter):
@@ -70,6 +72,63 @@ def configure_logging(level_name: str = "INFO") -> None:
     handler = logging.StreamHandler()
     handler.setFormatter(JsonLogFormatter())
     root_logger.handlers = [handler]
+
+
+def configure_error_tracking(settings: Any) -> bool:
+    if not getattr(settings, "sentry_dsn", None):
+        return False
+
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.logging import LoggingIntegration
+        from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+    except ImportError:
+        error_logger.warning("sentry_sdk_not_installed")
+        return False
+
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.sentry_environment,
+        release=settings.sentry_release,
+        traces_sample_rate=settings.sentry_traces_sample_rate,
+        send_default_pii=False,
+        integrations=[
+            FastApiIntegration(),
+            LoggingIntegration(level=logging.INFO, event_level=logging.ERROR),
+            SqlalchemyIntegration(),
+        ],
+    )
+    error_logger.info(
+        "sentry_configured",
+        extra={
+            "environment": settings.sentry_environment,
+            "release": settings.sentry_release,
+            "traces_sample_rate": settings.sentry_traces_sample_rate,
+        },
+    )
+    return True
+
+
+def capture_unhandled_exception(exc: Exception, request: Request, request_id: str) -> None:
+    try:
+        import sentry_sdk
+    except ImportError:
+        return
+
+    with sentry_sdk.push_scope() as scope:
+        scope.set_tag("request_id", request_id)
+        scope.set_tag("http.method", request.method)
+        scope.set_tag("http.path", request.url.path)
+        scope.set_context(
+            "request",
+            {
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+            },
+        )
+        sentry_sdk.capture_exception(exc)
 
 
 def get_request_id(request: Request) -> str:
@@ -174,6 +233,7 @@ def configure_observability(app: FastAPI) -> None:
                 "path": request.url.path,
             },
         )
+        capture_unhandled_exception(exc, request, request_id)
         return error_response(
             request_id=request_id,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -36,6 +36,15 @@ def parse_int_env(name: str, default: int) -> int:
     return value
 
 
+def parse_float_env(name: str, default: float) -> float:
+    raw_value = getenv(name, str(default))
+    try:
+        value = float(raw_value)
+    except ValueError as exc:
+        raise ConfigError(f"{name} must be a number") from exc
+    return value
+
+
 def parse_optional_env(name: str) -> str | None:
     value = getenv(name)
     if value is None:
@@ -77,6 +86,10 @@ class Settings:
         self.database_url = normalize_database_url(getenv("DATABASE_URL", DEV_DATABASE_URL))
         self.sql_echo = getenv("SQL_ECHO") == "1"
         self.log_level = getenv("LOG_LEVEL", "INFO").strip().upper()
+        self.sentry_dsn = parse_optional_env("SENTRY_DSN")
+        self.sentry_environment = getenv("SENTRY_ENVIRONMENT", self.app_env).strip()
+        self.sentry_release = parse_optional_env("SENTRY_RELEASE")
+        self.sentry_traces_sample_rate = parse_float_env("SENTRY_TRACES_SAMPLE_RATE", 0.0)
         self.auth_secret_key = getenv("AUTH_SECRET_KEY", DEV_AUTH_SECRET_KEY)
         self.access_token_expire_minutes = parse_int_env("ACCESS_TOKEN_EXPIRE_MINUTES", 60)
         self.refresh_token_expire_days = parse_int_env("REFRESH_TOKEN_EXPIRE_DAYS", 30)
@@ -127,6 +140,12 @@ class Settings:
                 "EMAIL_PROVIDER must be one of: "
                 + ", ".join(sorted(SUPPORTED_EMAIL_PROVIDERS))
             )
+
+        if not 0 <= self.sentry_traces_sample_rate <= 1:
+            raise ConfigError("SENTRY_TRACES_SAMPLE_RATE must be between 0 and 1")
+
+        if self.sentry_dsn and not self.sentry_environment:
+            raise ConfigError("SENTRY_ENVIRONMENT is required when SENTRY_DSN is set")
 
         if not self.is_production:
             return

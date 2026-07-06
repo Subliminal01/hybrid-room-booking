@@ -1,5 +1,7 @@
 import json
 import logging
+import sys
+from types import ModuleType, SimpleNamespace
 
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
@@ -7,7 +9,7 @@ from starlette.testclient import TestClient
 
 from app.database import get_session
 from app.main import app
-from app.observability import JsonLogFormatter
+from app.observability import JsonLogFormatter, capture_unhandled_exception, configure_error_tracking
 
 
 def make_session_override():
@@ -129,3 +131,92 @@ def test_validation_errors_include_request_id_and_error_code():
     assert isinstance(response.json()["detail"], list)
 
     app.dependency_overrides.clear()
+
+
+def test_configure_error_tracking_initializes_sentry(monkeypatch):
+    calls = {}
+    sentry_module = ModuleType("sentry_sdk")
+
+    def init(**kwargs):
+        calls["init"] = kwargs
+
+    sentry_module.init = init
+    fastapi_module = ModuleType("sentry_sdk.integrations.fastapi")
+    logging_module = ModuleType("sentry_sdk.integrations.logging")
+    sqlalchemy_module = ModuleType("sentry_sdk.integrations.sqlalchemy")
+
+    class FastApiIntegration:
+        pass
+
+    class LoggingIntegration:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    class SqlalchemyIntegration:
+        pass
+
+    fastapi_module.FastApiIntegration = FastApiIntegration
+    logging_module.LoggingIntegration = LoggingIntegration
+    sqlalchemy_module.SqlalchemyIntegration = SqlalchemyIntegration
+    monkeypatch.setitem(sys.modules, "sentry_sdk", sentry_module)
+    monkeypatch.setitem(sys.modules, "sentry_sdk.integrations.fastapi", fastapi_module)
+    monkeypatch.setitem(sys.modules, "sentry_sdk.integrations.logging", logging_module)
+    monkeypatch.setitem(sys.modules, "sentry_sdk.integrations.sqlalchemy", sqlalchemy_module)
+
+    configured = configure_error_tracking(
+        SimpleNamespace(
+            sentry_dsn="https://public@example.com/1",
+            sentry_environment="test",
+            sentry_release="test-release",
+            sentry_traces_sample_rate=0.25,
+        )
+    )
+
+    assert configured is True
+    assert calls["init"]["dsn"] == "https://public@example.com/1"
+    assert calls["init"]["environment"] == "test"
+    assert calls["init"]["release"] == "test-release"
+    assert calls["init"]["traces_sample_rate"] == 0.25
+    assert calls["init"]["send_default_pii"] is False
+    assert len(calls["init"]["integrations"]) == 3
+
+
+def test_capture_unhandled_exception_tags_request(monkeypatch):
+    captured = {}
+    sentry_module = ModuleType("sentry_sdk")
+
+    class FakeScope:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return None
+
+        def set_tag(self, key, value):
+            captured.setdefault("tags", {})[key] = value
+
+        def set_context(self, key, value):
+            captured.setdefault("contexts", {})[key] = value
+
+    def push_scope():
+        return FakeScope()
+
+    def capture_exception(exc):
+        captured["exception"] = exc
+
+    sentry_module.push_scope = push_scope
+    sentry_module.capture_exception = capture_exception
+    monkeypatch.setitem(sys.modules, "sentry_sdk", sentry_module)
+    request = SimpleNamespace(
+        method="POST",
+        url=SimpleNamespace(path="/workspaces"),
+    )
+    exc = RuntimeError("boom")
+
+    capture_unhandled_exception(exc, request, "req-123")
+
+    assert captured["exception"] is exc
+    assert captured["tags"]["request_id"] == "req-123"
+    assert captured["tags"]["http.method"] == "POST"
+    assert captured["tags"]["http.path"] == "/workspaces"
+    assert captured["contexts"]["request"]["request_id"] == "req-123"

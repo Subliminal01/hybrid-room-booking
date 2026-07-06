@@ -29,6 +29,12 @@ services:
         value: 5242880
       - key: LOG_LEVEL
         value: INFO
+      - key: SENTRY_DSN
+        sync: false
+      - key: SENTRY_ENVIRONMENT
+        value: production
+      - key: SENTRY_TRACES_SAMPLE_RATE
+        value: 0.05
       - key: CORS_ORIGINS
         value: https://hybrid-room-booking.vercel.app
       - key: FRONTEND_BASE_URL

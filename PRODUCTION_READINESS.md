@@ -30,6 +30,8 @@ payment-provider credentials, live domains, and provider webhook validation.
   of older unused verification/reset tokens.
 - Scheduled GitHub Actions uptime monitor for deployed frontend and backend
   readiness.
+- Optional Sentry backend error tracing with request IDs, HTTP method, and path
+  attached to unhandled exceptions.
 - Next.js frontend dashboard for workers, hosts, and admins.
 - Dockerfiles, Docker Compose, CI workflow, deployment runbook, and smoke tests.
 
@@ -49,6 +51,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 - Set `NEXT_PUBLIC_API_BASE_URL` for the deployed frontend.
 - Configure Razorpay or Stripe sandbox/live credentials.
 - Configure SMTP transactional-email credentials.
+- Configure `SENTRY_DSN` in Render for backend exception tracing.
 - Configure provider webhook URL:
   `POST https://your-api.example.com/payments/webhooks/{provider}`.
 - Complete one payment-provider sandbox transaction and verify the signed
@@ -57,7 +60,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 
 ## Current Completion Estimate
 
-The application is about 93% complete for MVP production readiness. The
+The application is about 94% complete for MVP production readiness. The
 remaining work is mostly external setup and validation: real payment credentials,
-SMTP credentials, durable object storage for uploads, dedicated error tracing,
+SMTP credentials, durable object storage for uploads, frontend error tracing,
 browser E2E coverage, and admin operations polish.

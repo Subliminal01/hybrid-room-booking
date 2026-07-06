@@ -57,7 +57,7 @@ from app.models import (
     WorkspaceReviewStatus,
     utc_now,
 )
-from app.observability import configure_logging, configure_observability
+from app.observability import configure_error_tracking, configure_logging, configure_observability
 from app.payment_service import (
     PaymentProviderError,
     checkout_reference_for_payments,
@@ -115,6 +115,7 @@ from app.security import hash_password, verify_password
 
 settings = get_settings()
 configure_logging(settings.log_level)
+configure_error_tracking(settings)
 app = FastAPI(title="Hybrid Room Booking API")
 upload_root = Path(settings.upload_dir).resolve()
 workspace_upload_dir = upload_root / "workspaces"

@@ -48,6 +48,10 @@ def test_development_allows_local_defaults(monkeypatch):
         "SMTP_USE_TLS",
         "SMTP_USE_SSL",
         "ALLOW_LOG_EMAIL_IN_PRODUCTION",
+        "SENTRY_DSN",
+        "SENTRY_ENVIRONMENT",
+        "SENTRY_RELEASE",
+        "SENTRY_TRACES_SAMPLE_RATE",
     ]:
         monkeypatch.delenv(name, raising=False)
 
@@ -66,6 +70,16 @@ def test_rejects_invalid_proxy_header_boolean(monkeypatch):
     monkeypatch.setenv("TRUST_PROXY_HEADERS", "maybe")
 
     with pytest.raises(ConfigError, match="TRUST_PROXY_HEADERS"):
+        get_settings()
+
+    clear_settings_cache()
+
+
+def test_rejects_invalid_sentry_sample_rate(monkeypatch):
+    clear_settings_cache()
+    monkeypatch.setenv("SENTRY_TRACES_SAMPLE_RATE", "2")
+
+    with pytest.raises(ConfigError, match="SENTRY_TRACES_SAMPLE_RATE"):
         get_settings()
 
     clear_settings_cache()
