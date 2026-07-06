@@ -2,6 +2,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 from starlette.testclient import TestClient
 
+import app.main as main_module
 from app.auth_service import issue_user_session, register_user as register_user_service
 from app.database import get_session
 from app.main import app
@@ -236,6 +237,80 @@ def test_workspace_photo_url_must_be_https():
     )
 
     assert update_response.status_code == 422
+
+    app.dependency_overrides.clear()
+
+
+def test_host_can_upload_workspace_photo(tmp_path, monkeypatch):
+    app.dependency_overrides[get_session] = make_session_override()
+    monkeypatch.setattr(main_module, "workspace_upload_dir", tmp_path)
+    client = TestClient(app)
+    token = register_user(client, email="host@example.com", role="host")
+    created = client.post(
+        "/workspaces",
+        json=workspace_payload(photo_url=None),
+        headers={"Authorization": f"Bearer {token}"},
+    ).json()
+
+    upload_response = client.post(
+        f"/workspaces/{created['id']}/photo",
+        files={"file": ("room.png", b"fake-png-bytes", "image/png")},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert upload_response.status_code == 200
+    uploaded = upload_response.json()
+    assert uploaded["photo_url"].startswith("http://testserver/uploads/workspaces/")
+    assert uploaded["photo_url"].endswith(".png")
+    assert len(list(tmp_path.iterdir())) == 1
+
+    app.dependency_overrides.clear()
+
+
+def test_workspace_photo_upload_rejects_invalid_file_type(tmp_path, monkeypatch):
+    app.dependency_overrides[get_session] = make_session_override()
+    monkeypatch.setattr(main_module, "workspace_upload_dir", tmp_path)
+    client = TestClient(app)
+    token = register_user(client, email="host@example.com", role="host")
+    created = client.post(
+        "/workspaces",
+        json=workspace_payload(photo_url=None),
+        headers={"Authorization": f"Bearer {token}"},
+    ).json()
+
+    upload_response = client.post(
+        f"/workspaces/{created['id']}/photo",
+        files={"file": ("notes.txt", b"plain text", "text/plain")},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert upload_response.status_code == 400
+    assert upload_response.json()["detail"] == "Workspace photo must be a JPEG, PNG, or WebP image"
+    assert list(tmp_path.iterdir()) == []
+
+    app.dependency_overrides.clear()
+
+
+def test_workspace_photo_upload_requires_owner(tmp_path, monkeypatch):
+    app.dependency_overrides[get_session] = make_session_override()
+    monkeypatch.setattr(main_module, "workspace_upload_dir", tmp_path)
+    client = TestClient(app)
+    owner_token = register_user(client, email="owner@example.com", role="host")
+    other_token = register_user(client, email="other@example.com", role="host")
+    created = client.post(
+        "/workspaces",
+        json=workspace_payload(photo_url=None),
+        headers={"Authorization": f"Bearer {owner_token}"},
+    ).json()
+
+    upload_response = client.post(
+        f"/workspaces/{created['id']}/photo",
+        files={"file": ("room.jpg", b"fake-jpg-bytes", "image/jpeg")},
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+
+    assert upload_response.status_code == 403
+    assert list(tmp_path.iterdir()) == []
 
     app.dependency_overrides.clear()
 

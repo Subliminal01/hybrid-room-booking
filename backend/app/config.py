@@ -70,6 +70,9 @@ class Settings:
         self.refresh_token_expire_days = parse_int_env("REFRESH_TOKEN_EXPIRE_DAYS", 30)
         self.booking_hold_minutes = parse_int_env("BOOKING_HOLD_MINUTES", 30)
         self.auth_rate_limit_per_minute = parse_int_env("AUTH_RATE_LIMIT_PER_MINUTE", 120)
+        self.upload_dir = getenv("UPLOAD_DIR", "uploads").strip() or "uploads"
+        self.max_upload_bytes = parse_int_env("MAX_UPLOAD_BYTES", 5 * 1024 * 1024)
+        self.public_api_base_url = parse_optional_env("PUBLIC_API_BASE_URL")
         self.frontend_base_url = getenv("FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
         self.email_from = getenv("EMAIL_FROM", "noreply@hybridrooms.local")
         self.email_provider = getenv("EMAIL_PROVIDER", "log").strip().lower()

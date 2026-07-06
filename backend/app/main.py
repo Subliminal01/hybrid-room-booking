@@ -1,9 +1,12 @@
 import hashlib
 import json
+from pathlib import Path
 from decimal import Decimal
+from uuid import uuid4
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from uuid import UUID
@@ -113,6 +116,10 @@ from app.security import hash_password, verify_password
 settings = get_settings()
 configure_logging(settings.log_level)
 app = FastAPI(title="Hybrid Room Booking API")
+upload_root = Path(settings.upload_dir).resolve()
+workspace_upload_dir = upload_root / "workspaces"
+workspace_upload_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=upload_root), name="uploads")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -122,6 +129,70 @@ app.add_middleware(
 )
 configure_rate_limiting(app, auth_limit_per_minute=settings.auth_rate_limit_per_minute)
 configure_observability(app)
+
+ALLOWED_WORKSPACE_IMAGE_TYPES = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+}
+
+
+def workspace_photo_url(request: Request, filename: str) -> str:
+    if settings.public_api_base_url:
+        return f"{settings.public_api_base_url.rstrip('/')}/uploads/workspaces/{filename}"
+    return str(request.url_for("uploads", path=f"workspaces/{filename}"))
+
+
+def get_owned_workspace(
+    workspace_id: UUID,
+    current_user: User,
+    session: Session,
+) -> Workspace:
+    workspace = session.get(Workspace, workspace_id)
+    if workspace is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workspace not found",
+        )
+    if workspace.owner_id != current_user.id and current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only update your own workspaces",
+        )
+    return workspace
+
+
+async def save_workspace_photo(file: UploadFile) -> str:
+    extension = ALLOWED_WORKSPACE_IMAGE_TYPES.get(file.content_type or "")
+    if extension is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Workspace photo must be a JPEG, PNG, or WebP image",
+        )
+
+    filename = f"{uuid4().hex}{extension}"
+    destination = workspace_upload_dir / filename
+    total_bytes = 0
+    with destination.open("wb") as output:
+        while chunk := await file.read(1024 * 1024):
+            total_bytes += len(chunk)
+            if total_bytes > settings.max_upload_bytes:
+                output.close()
+                destination.unlink(missing_ok=True)
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="Workspace photo is too large",
+                )
+            output.write(chunk)
+
+    if total_bytes == 0:
+        destination.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Workspace photo cannot be empty",
+        )
+
+    return filename
 
 
 def can_access_booking(booking: Booking, current_user: User, session: Session) -> bool:
@@ -605,21 +676,28 @@ def update_workspace(
     current_user: User = Depends(require_host_user),
     session: Session = Depends(get_session),
 ) -> Workspace:
-    workspace = session.get(Workspace, workspace_id)
-    if workspace is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Workspace not found",
-        )
-    if workspace.owner_id != current_user.id and current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only update your own workspaces",
-        )
+    workspace = get_owned_workspace(workspace_id, current_user, session)
 
     for field_name, value in request.model_dump(exclude_unset=True).items():
         setattr(workspace, field_name, value)
 
+    session.add(workspace)
+    session.commit()
+    session.refresh(workspace)
+    return workspace
+
+
+@app.post("/workspaces/{workspace_id}/photo", response_model=WorkspaceResponse)
+async def upload_workspace_photo(
+    workspace_id: UUID,
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_host_user),
+    session: Session = Depends(get_session),
+) -> Workspace:
+    workspace = get_owned_workspace(workspace_id, current_user, session)
+    filename = await save_workspace_photo(file)
+    workspace.photo_url = workspace_photo_url(request, filename)
     session.add(workspace)
     session.commit()
     session.refresh(workspace)

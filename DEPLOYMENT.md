@@ -30,6 +30,9 @@ DATABASE_URL=postgresql+psycopg://...
 AUTH_SECRET_KEY=<long-random-secret>
 CORS_ORIGINS=https://your-frontend.example.com
 FRONTEND_BASE_URL=https://your-frontend.example.com
+PUBLIC_API_BASE_URL=https://your-api.example.com
+UPLOAD_DIR=uploads
+MAX_UPLOAD_BYTES=5242880
 EMAIL_FROM=noreply@your-domain.example
 EMAIL_PROVIDER=smtp
 SMTP_HOST=<smtp-host>
@@ -68,6 +71,11 @@ validation, then switch to Razorpay or Stripe before accepting real payments.
 Similarly, `EMAIL_PROVIDER=log` with `ALLOW_LOG_EMAIL_IN_PRODUCTION=1` is only
 for demo validation. Switch to SMTP before relying on verification or password
 reset emails.
+
+Workspace photo uploads are stored under `UPLOAD_DIR` and served from
+`/uploads`. This is acceptable for demos, but local instance storage is not
+durable on many free hosts. Before public launch, move uploads to object storage
+such as S3, Cloudflare R2, or another managed media store.
 
 ## 3. Frontend Environment
 

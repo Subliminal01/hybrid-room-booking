@@ -52,6 +52,7 @@ import {
   searchWorkspaces,
   updateMe,
   updateWorkspace,
+  uploadWorkspacePhoto,
 } from "@/lib/api";
 
 type AuthMode = "login" | "register";
@@ -71,6 +72,7 @@ type WorkspaceForm = {
   city: string;
   state: string;
   photoUrl: string;
+  photoFile: File | null;
   dailyPrice: string;
   amenities: string[];
   availabilityDays: number[];
@@ -162,6 +164,7 @@ const initialWorkspaceForm: WorkspaceForm = {
   city: "Bengaluru",
   state: "Karnataka",
   photoUrl: "",
+  photoFile: null,
   dailyPrice: "",
   amenities: ["wifi", "desk"],
   availabilityDays: [0, 1, 2, 3, 4],
@@ -175,6 +178,8 @@ const BOOKING_PAGE_SIZE = 10;
 const AUDIT_PAGE_SIZE = 12;
 const DEFAULT_START_TIME = "09:00";
 const DEFAULT_END_TIME = "18:00";
+const MAX_WORKSPACE_PHOTO_BYTES = 5 * 1024 * 1024;
+const ALLOWED_WORKSPACE_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const HOST_AMENITIES = [
   { key: "wifi", label: "Wi-Fi" },
   { key: "desk", label: "Desk" },
@@ -202,6 +207,16 @@ function amenitiesFromRecord(amenities: Record<string, unknown> = {}) {
 
 function amenitiesToRecord(amenities: string[]) {
   return Object.fromEntries(amenities.map((amenity) => [amenity, true]));
+}
+
+function validateWorkspacePhotoFile(file: File) {
+  if (!ALLOWED_WORKSPACE_PHOTO_TYPES.includes(file.type)) {
+    return "Use a JPEG, PNG, or WebP image.";
+  }
+  if (file.size > MAX_WORKSPACE_PHOTO_BYTES) {
+    return "Workspace photo must be 5 MB or smaller.";
+  }
+  return null;
 }
 
 function listingDraftFromWorkspace(workspace: Workspace): ListingEditDraft {
@@ -1214,6 +1229,9 @@ export default function Home() {
         daily_price: workspaceForm.dailyPrice.trim(),
         amenities,
       });
+      const workspaceWithPhoto = workspaceForm.photoFile
+        ? await uploadWorkspacePhoto(session.access_token, created.id, workspaceForm.photoFile)
+        : created;
       const rules = await replaceWorkspaceAvailability(
         session.access_token,
         created.id,
@@ -1223,7 +1241,7 @@ export default function Home() {
           end_time: workspaceForm.availabilityEnd,
         })),
       );
-      const createdWithAvailability = { ...created, availability_rules: rules };
+      const createdWithAvailability = { ...workspaceWithPhoto, availability_rules: rules };
       setHostWorkspaces((current) => [createdWithAvailability, ...current]);
       setAvailabilityDrafts((current) => ({
         ...current,
@@ -1234,7 +1252,7 @@ export default function Home() {
         [created.id]: draftFromBlackoutDates(created),
       }));
       setWorkspaceForm(initialWorkspaceForm);
-      setMessage(`${created.title} was submitted for admin review.`);
+      setMessage(`${workspaceWithPhoto.title} was submitted for admin review.`);
     });
   }
 
@@ -1245,6 +1263,49 @@ export default function Home() {
         ? current.amenities.filter((item) => item !== amenity)
         : [...current.amenities, amenity],
     }));
+  }
+
+  function handleNewWorkspacePhoto(file: File | null) {
+    if (!file) {
+      setWorkspaceForm((current) => ({ ...current, photoFile: null }));
+      return;
+    }
+    const validationError = validateWorkspacePhotoFile(file);
+    if (validationError) {
+      setError(validationError);
+      setWorkspaceForm((current) => ({ ...current, photoFile: null }));
+      return;
+    }
+    setError(null);
+    setWorkspaceForm((current) => ({ ...current, photoFile: file, photoUrl: "" }));
+  }
+
+  async function handleListingPhotoUpload(workspace: Workspace, file: File | null) {
+    if (!session || !file) {
+      return;
+    }
+    const validationError = validateWorkspacePhotoFile(file);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    await runAction(async () => {
+      const updated = await uploadWorkspacePhoto(session.access_token, workspace.id, file);
+      const merged = {
+        ...workspace,
+        ...updated,
+        availability_rules: updated.availability_rules ?? workspace.availability_rules,
+        blackout_dates: updated.blackout_dates ?? workspace.blackout_dates,
+      };
+      setHostWorkspaces((current) =>
+        current.map((item) => (item.id === workspace.id ? merged : item)),
+      );
+      setListingDrafts((current) => ({
+        ...current,
+        [workspace.id]: listingDraftFromWorkspace(merged),
+      }));
+      setMessage(`${workspace.title} photo updated.`);
+    });
   }
 
   function toggleWorkspaceFormDay(day: number) {
@@ -2280,7 +2341,22 @@ export default function Home() {
                       />
                     </div>
                     <div className="field">
-                      <label htmlFor="workspacePhoto">Photo URL</label>
+                      <label htmlFor="workspacePhotoFile">Photo upload</label>
+                      <input
+                        id="workspacePhotoFile"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={(event) =>
+                          handleNewWorkspacePhoto(event.target.files?.[0] ?? null)
+                        }
+                      />
+                      {workspaceForm.photoFile ? (
+                        <div className="muted">{workspaceForm.photoFile.name}</div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="field">
+                    <label htmlFor="workspacePhoto">Photo URL fallback</label>
                       <input
                         id="workspacePhoto"
                         placeholder="https://..."
@@ -2289,10 +2365,10 @@ export default function Home() {
                           setWorkspaceForm((current) => ({
                             ...current,
                             photoUrl: event.target.value,
+                            photoFile: null,
                           }))
                         }
                       />
-                    </div>
                   </div>
                   <div className="field">
                     <label>Amenities</label>
@@ -2471,7 +2547,20 @@ export default function Home() {
                                 />
                               </div>
                               <div className="field">
-                                <label htmlFor={`listing-photo-${workspace.id}`}>Photo URL</label>
+                                <label htmlFor={`listing-photo-file-${workspace.id}`}>Photo upload</label>
+                                <input
+                                  id={`listing-photo-file-${workspace.id}`}
+                                  type="file"
+                                  accept="image/jpeg,image/png,image/webp"
+                                  onChange={(event) =>
+                                    handleListingPhotoUpload(workspace, event.target.files?.[0] ?? null)
+                                  }
+                                  disabled={busy}
+                                />
+                              </div>
+                            </div>
+                            <div className="field">
+                              <label htmlFor={`listing-photo-${workspace.id}`}>Photo URL fallback</label>
                                 <input
                                   id={`listing-photo-${workspace.id}`}
                                   value={listingDraft.photoUrl}
@@ -2479,7 +2568,6 @@ export default function Home() {
                                     updateListingDraft(workspace.id, { photoUrl: event.target.value })
                                   }
                                 />
-                              </div>
                             </div>
                             <div className="field">
                               <label>Amenities</label>

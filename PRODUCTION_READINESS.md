@@ -15,6 +15,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 - Worker, host, and admin authentication flows with access/refresh tokens.
 - Email verification and password reset service boundaries with SMTP delivery support.
 - Workspace listing, host availability, blackout dates, and admin moderation.
+- Host workspace photo uploads with file type and size validation.
 - Rota-based workspace search and multi-day booking groups.
 - Idempotent booking creation and stale pending-booking expiry.
 - Booking history, cancellation, receipts, host revenue, and admin audit logs.
@@ -54,5 +55,5 @@ payment-provider credentials, live domains, and provider webhook validation.
 
 The application is about 90% complete for MVP production readiness. The
 remaining work is mostly external setup and validation: real payment credentials,
-SMTP credentials, uptime/error monitoring, browser E2E coverage, image upload,
-and admin operations polish.
+SMTP credentials, durable object storage for uploads, uptime/error monitoring,
+browser E2E coverage, and admin operations polish.

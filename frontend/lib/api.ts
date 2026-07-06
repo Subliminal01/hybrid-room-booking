@@ -276,6 +276,44 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}): Promis
   return response.json() as Promise<T>;
 }
 
+async function apiFormRequest<T>(path: string, token: string, body: FormData): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body,
+  });
+
+  if (!response.ok) {
+    let message = `Request failed with ${response.status}`;
+    let errorCode: string | null = null;
+    let requestId = response.headers.get("X-Request-ID");
+    try {
+      const errorBody = (await response.json()) as ApiErrorBody;
+      message = errorMessageFromDetail(errorBody.detail, message);
+      if (typeof errorBody.error_code === "string") {
+        errorCode = errorBody.error_code;
+      }
+      if (typeof errorBody.request_id === "string") {
+        requestId = errorBody.request_id;
+      }
+    } catch {
+      // Keep status message when backend returns no JSON body.
+    }
+    throw new ApiError(
+      requestId ? `${message} (Request ID: ${requestId.slice(0, 8)})` : message,
+      {
+        status: response.status,
+        errorCode,
+        requestId,
+      },
+    );
+  }
+
+  return response.json() as Promise<T>;
+}
+
 export function register(payload: {
   email: string;
   password: string;
@@ -527,6 +565,12 @@ export function updateWorkspace(token: string, workspaceId: string, payload: {
     method: "PATCH",
     body: payload,
   });
+}
+
+export function uploadWorkspacePhoto(token: string, workspaceId: string, file: File) {
+  const body = new FormData();
+  body.append("file", file);
+  return apiFormRequest<Workspace>(`/workspaces/${workspaceId}/photo`, token, body);
 }
 
 export function listHostBookings(token: string, params: { limit?: number; offset?: number } = {}) {

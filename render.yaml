@@ -21,12 +21,18 @@ services:
         value: 30
       - key: AUTH_RATE_LIMIT_PER_MINUTE
         value: 120
+      - key: UPLOAD_DIR
+        value: uploads
+      - key: MAX_UPLOAD_BYTES
+        value: 5242880
       - key: LOG_LEVEL
         value: INFO
       - key: CORS_ORIGINS
         value: https://hybrid-room-booking.vercel.app
       - key: FRONTEND_BASE_URL
         value: https://hybrid-room-booking.vercel.app
+      - key: PUBLIC_API_BASE_URL
+        value: https://hybrid-room-booking-api.onrender.com
       - key: EMAIL_FROM
         value: noreply@hybridrooms.local
       - key: EMAIL_PROVIDER
