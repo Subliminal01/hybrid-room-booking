@@ -213,6 +213,15 @@ export type PaymentProviderStatus = {
   manual_confirmation_enabled: boolean;
 };
 
+export type StorageStatus = {
+  provider: string;
+  ready: boolean;
+  durable: boolean;
+  public_base_url: string | null;
+  required_settings: string[];
+  missing_settings: string[];
+};
+
 type RequestOptions = {
   token?: string;
   method?: string;
@@ -604,6 +613,10 @@ export function listAdminPayments(
 
 export function getAdminPaymentProviderStatus(token: string) {
   return apiRequest<PaymentProviderStatus>("/admin/payment-provider/status", { token });
+}
+
+export function getAdminStorageStatus(token: string) {
+  return apiRequest<StorageStatus>("/admin/storage/status", { token });
 }
 
 export function sendAdminEmailTest(token: string) {

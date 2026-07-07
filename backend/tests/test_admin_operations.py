@@ -156,6 +156,7 @@ def test_non_admin_cannot_list_admin_operations():
     assert client.get("/admin/bookings", headers=headers).status_code == 403
     assert client.get("/admin/payments", headers=headers).status_code == 403
     assert client.get("/admin/payment-provider/status", headers=headers).status_code == 403
+    assert client.get("/admin/storage/status", headers=headers).status_code == 403
 
     app.dependency_overrides.clear()
 
@@ -246,6 +247,59 @@ def test_admin_payment_provider_status_reports_missing_razorpay_settings(monkeyp
         "RAZORPAY_WEBHOOK_SECRET",
     ]
     assert body["webhook_url"] == "https://api.example.com/payments/webhooks/razorpay"
+
+    app.dependency_overrides.clear()
+
+
+def test_admin_can_read_local_storage_status():
+    client, admin, *_ = setup_admin_fixture()
+
+    response = client.get(
+        "/admin/storage/status",
+        headers={"Authorization": f"Bearer {admin['access_token']}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "local"
+    assert body["ready"] is True
+    assert body["durable"] is False
+    assert body["public_base_url"] is None
+    assert body["required_settings"] == []
+    assert body["missing_settings"] == []
+
+    app.dependency_overrides.clear()
+
+
+def test_admin_storage_status_reports_missing_s3_settings(monkeypatch):
+    client, admin, *_ = setup_admin_fixture()
+    monkeypatch.setattr("app.main.settings.storage_provider", "s3")
+    monkeypatch.setattr("app.main.settings.s3_bucket", "workspace-photos")
+    monkeypatch.setattr("app.main.settings.s3_access_key_id", None)
+    monkeypatch.setattr("app.main.settings.s3_secret_access_key", None)
+    monkeypatch.setattr("app.main.settings.s3_public_base_url", "https://cdn.example.com")
+
+    response = client.get(
+        "/admin/storage/status",
+        headers={"Authorization": f"Bearer {admin['access_token']}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "s3"
+    assert body["ready"] is False
+    assert body["durable"] is True
+    assert body["public_base_url"] == "https://cdn.example.com"
+    assert body["required_settings"] == [
+        "S3_BUCKET",
+        "S3_ACCESS_KEY_ID",
+        "S3_SECRET_ACCESS_KEY",
+        "S3_PUBLIC_BASE_URL",
+    ]
+    assert body["missing_settings"] == [
+        "S3_ACCESS_KEY_ID",
+        "S3_SECRET_ACCESS_KEY",
+    ]
 
     app.dependency_overrides.clear()
 

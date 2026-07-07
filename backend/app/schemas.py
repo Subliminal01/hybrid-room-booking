@@ -161,6 +161,15 @@ class AdminPaymentProviderStatusResponse(BaseModel):
     manual_confirmation_enabled: bool
 
 
+class AdminStorageStatusResponse(BaseModel):
+    provider: str
+    ready: bool
+    durable: bool
+    public_base_url: str | None
+    required_settings: list[str]
+    missing_settings: list[str]
+
+
 class TimeSlot(BaseModel):
     start_at: datetime
     end_at: datetime

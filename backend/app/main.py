@@ -74,6 +74,7 @@ from app.rate_limit import configure_rate_limiting
 from app.schemas import (
     AdminEmailTestResponse,
     AdminPaymentProviderStatusResponse,
+    AdminStorageStatusResponse,
     AuditEventPageResponse,
     AuditEventResponse,
     AvailabilityRuleResponse,
@@ -592,6 +593,31 @@ def read_admin_payment_provider_status(
         required_settings=[name for name, _ in provider_requirements],
         missing_settings=missing_settings,
         manual_confirmation_enabled=settings.payment_provider == "mock",
+    )
+
+
+@app.get("/admin/storage/status", response_model=AdminStorageStatusResponse)
+def read_admin_storage_status(
+    current_user: User = Depends(require_admin_user),
+) -> AdminStorageStatusResponse:
+    storage_settings = {
+        "local": [],
+        "s3": [
+            ("S3_BUCKET", settings.s3_bucket),
+            ("S3_ACCESS_KEY_ID", settings.s3_access_key_id),
+            ("S3_SECRET_ACCESS_KEY", settings.s3_secret_access_key),
+            ("S3_PUBLIC_BASE_URL", settings.s3_public_base_url),
+        ],
+    }
+    storage_requirements = storage_settings.get(settings.storage_provider, [])
+    missing_settings = [name for name, value in storage_requirements if not value]
+    return AdminStorageStatusResponse(
+        provider=settings.storage_provider,
+        ready=len(missing_settings) == 0,
+        durable=settings.storage_provider == "s3",
+        public_base_url=settings.s3_public_base_url,
+        required_settings=[name for name, _ in storage_requirements],
+        missing_settings=missing_settings,
     )
 
 

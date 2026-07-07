@@ -175,6 +175,17 @@ async function mockApi(page: Page) {
       });
     }
 
+    if (method === "GET" && path === "/admin/storage/status") {
+      return fulfillJson(route, {
+        provider: "local",
+        ready: true,
+        durable: false,
+        public_base_url: null,
+        required_settings: [],
+        missing_settings: [],
+      });
+    }
+
     if (method === "POST" && path === "/admin/email/test") {
       return fulfillJson(route, {
         message: "Test email sent",

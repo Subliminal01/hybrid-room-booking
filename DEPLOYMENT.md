@@ -100,6 +100,9 @@ S3_PUBLIC_BASE_URL=https://your-public-bucket-domain
 ```
 
 `S3_PUBLIC_BASE_URL` must be an HTTPS URL that serves public workspace photos.
+Admins can verify the active storage mode from Admin Operations. The upload
+storage status block shows whether uploads are using local disk or durable
+S3-compatible object storage, plus any missing S3 settings.
 
 `AUTH_RATE_LIMIT_PER_MINUTE` applies to sensitive auth routes by both source IP
 and normalized account email where available. Set `TRUST_PROXY_HEADERS=1` only

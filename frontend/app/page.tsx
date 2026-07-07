@@ -23,6 +23,7 @@ import {
   HostRevenueSummary,
   Payment,
   PaymentProviderStatus,
+  StorageStatus,
   TimeSlot,
   TokenResponse,
   User,
@@ -36,6 +37,7 @@ import {
   createBookingGroupCheckoutSession,
   createBooking,
   getAdminPaymentProviderStatus,
+  getAdminStorageStatus,
   getBookingGroupReceipt,
   createWorkspace,
   getHostRevenueSummary,
@@ -581,6 +583,7 @@ export default function Home() {
   const [adminPaymentsTotal, setAdminPaymentsTotal] = useState(0);
   const [paymentProviderStatus, setPaymentProviderStatus] =
     useState<PaymentProviderStatus | null>(null);
+  const [storageStatus, setStorageStatus] = useState<StorageStatus | null>(null);
   const [availabilityDrafts, setAvailabilityDrafts] = useState<Record<string, AvailabilityDraft>>({});
   const [blackoutDrafts, setBlackoutDrafts] = useState<Record<string, BlackoutDraft>>({});
   const [listingDrafts, setListingDrafts] = useState<Record<string, ListingEditDraft>>({});
@@ -723,6 +726,7 @@ export default function Home() {
           bookingsPage,
           paymentsPage,
           providerStatus,
+          nextStorageStatus,
         ] = await Promise.all([
           listWorkspacesForReview(currentSession.access_token, "pending"),
           listAuditEvents(currentSession.access_token, { limit: AUDIT_PAGE_SIZE }),
@@ -730,6 +734,7 @@ export default function Home() {
           listAdminBookings(currentSession.access_token, { limit: ADMIN_PAGE_SIZE }),
           listAdminPayments(currentSession.access_token, { limit: ADMIN_PAGE_SIZE }),
           getAdminPaymentProviderStatus(currentSession.access_token),
+          getAdminStorageStatus(currentSession.access_token),
         ]);
         setReviewWorkspaces(reviewQueue);
         setAuditEvents(auditPage.items);
@@ -741,6 +746,7 @@ export default function Home() {
         setAdminPayments(paymentsPage.items);
         setAdminPaymentsTotal(paymentsPage.total);
         setPaymentProviderStatus(providerStatus);
+        setStorageStatus(nextStorageStatus);
       }
     } catch {
       if (currentSession.refresh_token) {
@@ -795,6 +801,7 @@ export default function Home() {
     setAdminPayments([]);
     setAdminPaymentsTotal(0);
     setPaymentProviderStatus(null);
+    setStorageStatus(null);
     setListingDrafts({});
     setResults([]);
     setActiveTab("worker");
@@ -854,6 +861,7 @@ export default function Home() {
           bookingsPage,
           paymentsPage,
           providerStatus,
+          nextStorageStatus,
         ] = await Promise.all([
           listWorkspacesForReview(response.access_token, "pending"),
           listAuditEvents(response.access_token, { limit: AUDIT_PAGE_SIZE }),
@@ -861,6 +869,7 @@ export default function Home() {
           listAdminBookings(response.access_token, { limit: ADMIN_PAGE_SIZE }),
           listAdminPayments(response.access_token, { limit: ADMIN_PAGE_SIZE }),
           getAdminPaymentProviderStatus(response.access_token),
+          getAdminStorageStatus(response.access_token),
         ]);
         setReviewWorkspaces(reviewQueue);
         setAuditEvents(auditPage.items);
@@ -872,6 +881,7 @@ export default function Home() {
         setAdminPayments(paymentsPage.items);
         setAdminPaymentsTotal(paymentsPage.total);
         setPaymentProviderStatus(providerStatus);
+        setStorageStatus(nextStorageStatus);
       }
     });
   }
@@ -1186,12 +1196,14 @@ export default function Home() {
     if (!token || !isAdmin) {
       return;
     }
-    const [usersPage, bookingsPage, paymentsPage, providerStatus] = await Promise.all([
-      listAdminUsers(token, { limit: ADMIN_PAGE_SIZE }),
-      listAdminBookings(token, { limit: ADMIN_PAGE_SIZE }),
-      listAdminPayments(token, { limit: ADMIN_PAGE_SIZE }),
-      getAdminPaymentProviderStatus(token),
-    ]);
+    const [usersPage, bookingsPage, paymentsPage, providerStatus, nextStorageStatus] =
+      await Promise.all([
+        listAdminUsers(token, { limit: ADMIN_PAGE_SIZE }),
+        listAdminBookings(token, { limit: ADMIN_PAGE_SIZE }),
+        listAdminPayments(token, { limit: ADMIN_PAGE_SIZE }),
+        getAdminPaymentProviderStatus(token),
+        getAdminStorageStatus(token),
+      ]);
     setAdminUsers(usersPage.items);
     setAdminUsersTotal(usersPage.total);
     setAdminBookings(bookingsPage.items);
@@ -1199,6 +1211,7 @@ export default function Home() {
     setAdminPayments(paymentsPage.items);
     setAdminPaymentsTotal(paymentsPage.total);
     setPaymentProviderStatus(providerStatus);
+    setStorageStatus(nextStorageStatus);
   }
 
   async function loadMoreAdminUsers() {
@@ -2365,6 +2378,34 @@ export default function Home() {
                         }`}
                       >
                         {paymentProviderStatus.ready ? "ready" : "setup needed"}
+                      </span>
+                    </div>
+                  ) : null}
+
+                  {storageStatus ? (
+                    <div className="audit-row">
+                      <div>
+                        <strong>Upload storage: {storageStatus.provider}</strong>
+                        <div className="muted">
+                          {storageStatus.durable
+                            ? "Durable object storage enabled"
+                            : "Local disk storage for demos only"}
+                        </div>
+                        {storageStatus.public_base_url ? (
+                          <div className="muted">
+                            Public base URL: {storageStatus.public_base_url}
+                          </div>
+                        ) : null}
+                        {storageStatus.missing_settings.length > 0 ? (
+                          <div className="muted">
+                            Missing: {storageStatus.missing_settings.join(", ")}
+                          </div>
+                        ) : null}
+                      </div>
+                      <span
+                        className={`status ${storageStatus.ready ? "confirmed" : "pending"}`}
+                      >
+                        {storageStatus.ready ? "ready" : "setup needed"}
                       </span>
                     </div>
                   ) : null}

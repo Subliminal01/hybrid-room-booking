@@ -23,6 +23,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 - Booking history, cancellation, receipts, host revenue, and admin audit logs.
 - Admin operations views for marketplace users, bookings, and payments.
 - Admin payment-provider status check with safe Razorpay/Stripe setup diagnostics.
+- Admin upload-storage status check with safe local/S3 setup diagnostics.
 - Log and SMTP email-provider modes.
 - Mock, Razorpay, and Stripe payment-provider boundaries.
 - Signed payment webhook handling for success and failure events.
@@ -43,7 +44,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 
 ## Verified Locally
 
-- Backend full test suite: `83 passed, 1 warning`.
+- Backend full test suite: `123 passed, 1 warning`.
 - Backend release check: passed.
 - Storage configuration and workspace upload tests: passed.
 - Backend HTTP smoke test: passed end to end with mock payments.
@@ -53,6 +54,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 - Admin operations tests: passed.
 - Admin SMTP test-email endpoint tests: passed.
 - Admin payment-provider status tests: passed.
+- Admin upload-storage status tests: passed.
 - Browser E2E assertions for worker, host, and admin flows: passed locally; the
   Windows Playwright runner intermittently hangs while closing Chromium after
   successful assertions.
@@ -71,12 +73,14 @@ payment-provider credentials, live domains, and provider webhook validation.
   `POST https://your-api.example.com/payments/webhooks/{provider}`.
 - Confirm the admin payment-provider status block shows `ready` after provider
   credentials are deployed.
+- Confirm the admin upload-storage status block shows durable S3-compatible
+  storage before relying on hosted workspace photos.
 - Complete one payment-provider sandbox transaction and verify the signed
   webhook confirms the booking group.
 - Run post-deploy smoke and uptime checks from `DEPLOYMENT.md`.
 
 ## Current Completion Estimate
 
-The application is about 98% complete for MVP production readiness. The
+The application is about 99% complete for MVP production readiness. The
 remaining work is mostly external setup and validation: real payment credentials,
 deployed SMTP credentials, and deployed object-storage credentials.
