@@ -220,7 +220,8 @@ that checks:
 It runs every 15 minutes and can be triggered manually from GitHub Actions using
 the `Uptime Monitor` workflow. GitHub will mark the workflow failed if the
 frontend shell is unavailable, the backend readiness endpoint fails, or database
-readiness is not `ok`.
+readiness is not `ok`. Backend readiness checks retry with a longer timeout so
+Render free-tier cold starts do not create avoidable false alarms.
 
 You can run the same check locally:
 

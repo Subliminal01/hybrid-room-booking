@@ -32,7 +32,13 @@ jobs:
 
       - name: Check backend readiness
         run: |
-          status=$(curl --silent --show-error --location --max-time 20 --output /tmp/backend-ready.json --write-out "%{http_code}" "$BACKEND_READY_URL")
+          status="000"
+          for attempt in 1 2 3 4; do
+            echo "Backend readiness attempt $attempt"
+            status=$(curl --silent --show-error --location --max-time 60 --output /tmp/backend-ready.json --write-out "%{http_code}" "$BACKEND_READY_URL") && break
+            echo "Backend readiness curl failed with status $status"
+            sleep 15
+          done
           if [ "$status" -ne 200 ]; then
             echo "Backend readiness returned HTTP $status"
             cat /tmp/backend-ready.json || true
