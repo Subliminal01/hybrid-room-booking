@@ -91,6 +91,13 @@ class UserResponse(BaseModel):
     email_verified_at: datetime | None
 
 
+class UserPageResponse(BaseModel):
+    items: list[UserResponse]
+    total: int
+    limit: int
+    offset: int
+
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
@@ -420,6 +427,13 @@ class PaymentResponse(BaseModel):
     provider_checkout_reference: str | None = None
     paid_at: datetime | None
     refunded_at: datetime | None
+
+
+class PaymentPageResponse(BaseModel):
+    items: list[PaymentResponse]
+    total: int
+    limit: int
+    offset: int
 
 
 class PaymentCheckoutSessionResponse(BaseModel):

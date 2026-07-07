@@ -94,11 +94,13 @@ from app.schemas import (
     PasswordResetRequest,
     PasswordResetRequestResponse,
     PaymentCheckoutSessionResponse,
+    PaymentPageResponse,
     PaymentResponse,
     PaymentWebhookResponse,
     RefreshTokenRequest,
     TokenResponse,
     UserLoginRequest,
+    UserPageResponse,
     UserRegisterRequest,
     UserResponse,
     UserUpdateRequest,
@@ -594,6 +596,91 @@ def list_workspaces_for_review(
     if review_status is not None:
         query = query.where(Workspace.review_status == review_status)
     return session.exec(query.order_by(Workspace.created_at.desc())).all()
+
+
+@app.get("/admin/users", response_model=UserPageResponse)
+def list_admin_users(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    role: UserRole | None = None,
+    is_active: bool | None = None,
+    current_user: User = Depends(require_admin_user),
+    session: Session = Depends(get_session),
+) -> UserPageResponse:
+    query = select(User)
+    count_query = select(func.count(User.id))
+    if role is not None:
+        query = query.where(User.role == role)
+        count_query = count_query.where(User.role == role)
+    if is_active is not None:
+        query = query.where(User.is_active == is_active)
+        count_query = count_query.where(User.is_active == is_active)
+
+    total = session.exec(count_query).one()
+    items = session.exec(query.order_by(User.created_at.desc()).offset(offset).limit(limit)).all()
+    return UserPageResponse(
+        items=[UserResponse.model_validate(user) for user in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/admin/bookings", response_model=BookingPageResponse)
+def list_admin_bookings(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    status_filter: BookingStatus | None = Query(default=None, alias="status"),
+    current_user: User = Depends(require_admin_user),
+    session: Session = Depends(get_session),
+) -> BookingPageResponse:
+    expire_stale_pending_bookings(session)
+    query = select(Booking)
+    count_query = select(func.count(Booking.id))
+    if status_filter is not None:
+        query = query.where(Booking.status == status_filter)
+        count_query = count_query.where(Booking.status == status_filter)
+
+    total = session.exec(count_query).one()
+    items = session.exec(
+        query.order_by(Booking.start_at.desc()).offset(offset).limit(limit)
+    ).all()
+    return BookingPageResponse(
+        items=[BookingResponse.model_validate(booking) for booking in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/admin/payments", response_model=PaymentPageResponse)
+def list_admin_payments(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    status_filter: PaymentStatus | None = Query(default=None, alias="status"),
+    provider: str | None = Query(default=None, max_length=40),
+    current_user: User = Depends(require_admin_user),
+    session: Session = Depends(get_session),
+) -> PaymentPageResponse:
+    query = select(Payment)
+    count_query = select(func.count(Payment.id))
+    if status_filter is not None:
+        query = query.where(Payment.status == status_filter)
+        count_query = count_query.where(Payment.status == status_filter)
+    if provider is not None:
+        query = query.where(Payment.provider == provider)
+        count_query = count_query.where(Payment.provider == provider)
+
+    total = session.exec(count_query).one()
+    items = session.exec(
+        query.order_by(Payment.created_at.desc()).offset(offset).limit(limit)
+    ).all()
+    return PaymentPageResponse(
+        items=[PaymentResponse.model_validate(payment) for payment in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @app.get("/admin/audit-events", response_model=AuditEventPageResponse)

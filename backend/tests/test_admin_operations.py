@@ -1,0 +1,199 @@
+from sqlalchemy.pool import StaticPool
+from sqlmodel import Session, SQLModel, create_engine
+from starlette.testclient import TestClient
+
+from app.auth_service import issue_user_session, register_user as register_user_service
+from app.database import get_session
+from app.main import app
+from app.models import UserRole
+
+
+def make_session_override():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    SQLModel.metadata.create_all(engine)
+
+    def override_get_session():
+        with Session(engine) as session:
+            yield session
+
+    return override_get_session
+
+
+def register_user(client: TestClient, *, email: str, role: str = "worker") -> dict:
+    if role == "admin":
+        session_override = app.dependency_overrides[get_session]
+        session_generator = session_override()
+        session = next(session_generator)
+        try:
+            user = register_user_service(
+                session,
+                email=email,
+                password="strong-password",
+                full_name="Test User",
+                role=UserRole.ADMIN,
+            )
+            access_token, refresh_token = issue_user_session(session, user)
+            return {
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "user": {
+                    "id": str(user.id),
+                    "email": user.email,
+                    "full_name": user.full_name,
+                    "role": user.role.value,
+                },
+            }
+        finally:
+            session_generator.close()
+
+    response = client.post(
+        "/auth/register",
+        json={
+            "email": email,
+            "password": "strong-password",
+            "full_name": "Test User",
+            "role": role,
+        },
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+def create_workspace(client: TestClient, *, host_token: str, admin_token: str, title: str) -> dict:
+    response = client.post(
+        "/workspaces",
+        json={
+            "title": title,
+            "description": "Quiet room for hybrid workdays",
+            "address_line": "12 Residency Road",
+            "city": "Bengaluru",
+            "state": "Karnataka",
+            "daily_price": "850.00",
+            "amenities": {"wifi": True, "desk": True},
+        },
+        headers={"Authorization": f"Bearer {host_token}"},
+    )
+    assert response.status_code == 201
+    workspace = response.json()
+    review_response = client.patch(
+        f"/admin/workspaces/{workspace['id']}/review",
+        json={"review_status": "approved"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert review_response.status_code == 200
+    return review_response.json()
+
+
+def book_workspace(client: TestClient, *, worker_token: str, workspace_id: str, day: int) -> dict:
+    response = client.post(
+        "/bookings",
+        json={
+            "workspace_id": workspace_id,
+            "rota_label": "Office rota",
+            "slots": [
+                {
+                    "start_at": f"2026-07-{day:02d}T09:00:00+05:30",
+                    "end_at": f"2026-07-{day:02d}T18:00:00+05:30",
+                }
+            ],
+        },
+        headers={"Authorization": f"Bearer {worker_token}"},
+    )
+    assert response.status_code == 201
+    return response.json()["bookings"][0]
+
+
+def setup_admin_fixture():
+    app.dependency_overrides[get_session] = make_session_override()
+    client = TestClient(app)
+    admin = register_user(client, email="admin@example.com", role="admin")
+    host = register_user(client, email="host@example.com", role="host")
+    worker = register_user(client, email="worker@example.com")
+    workspace = create_workspace(
+        client,
+        host_token=host["access_token"],
+        admin_token=admin["access_token"],
+        title="Admin ops room",
+    )
+    booking = book_workspace(
+        client,
+        worker_token=worker["access_token"],
+        workspace_id=workspace["id"],
+        day=8,
+    )
+    return client, admin, host, worker, workspace, booking
+
+
+def test_admin_can_list_users_with_role_filter_and_pagination():
+    client, admin, *_ = setup_admin_fixture()
+
+    response = client.get(
+        "/admin/users?role=worker&limit=1&offset=0",
+        headers={"Authorization": f"Bearer {admin['access_token']}"},
+    )
+
+    assert response.status_code == 200
+    page = response.json()
+    assert page["total"] == 1
+    assert page["limit"] == 1
+    assert page["offset"] == 0
+    assert page["items"][0]["email"] == "worker@example.com"
+    assert page["items"][0]["role"] == "worker"
+
+    app.dependency_overrides.clear()
+
+
+def test_non_admin_cannot_list_admin_operations():
+    client, _, _, worker, *_ = setup_admin_fixture()
+    headers = {"Authorization": f"Bearer {worker['access_token']}"}
+
+    assert client.get("/admin/users", headers=headers).status_code == 403
+    assert client.get("/admin/bookings", headers=headers).status_code == 403
+    assert client.get("/admin/payments", headers=headers).status_code == 403
+
+    app.dependency_overrides.clear()
+
+
+def test_admin_can_list_all_bookings_with_status_filter():
+    client, admin, *_, booking = setup_admin_fixture()
+
+    response = client.get(
+        "/admin/bookings?status=pending",
+        headers={"Authorization": f"Bearer {admin['access_token']}"},
+    )
+
+    assert response.status_code == 200
+    page = response.json()
+    assert page["total"] == 1
+    assert page["items"][0]["id"] == booking["id"]
+    assert page["items"][0]["workspace"]["title"] == "Admin ops room"
+    assert page["items"][0]["user"]["email"] == "worker@example.com"
+
+    app.dependency_overrides.clear()
+
+
+def test_admin_can_list_payments_with_status_filter():
+    client, admin, *_, booking = setup_admin_fixture()
+    checkout_response = client.post(
+        f"/booking-groups/{booking['booking_group_id']}/payment-intent",
+        headers={"Authorization": f"Bearer {admin['access_token']}"},
+    )
+    assert checkout_response.status_code == 200
+
+    response = client.get(
+        "/admin/payments?status=pending",
+        headers={"Authorization": f"Bearer {admin['access_token']}"},
+    )
+
+    assert response.status_code == 200
+    page = response.json()
+    assert page["total"] == 1
+    assert page["items"][0]["booking_id"] == booking["id"]
+    assert page["items"][0]["status"] == "pending"
+    assert page["items"][0]["provider"] == "mock"
+
+    app.dependency_overrides.clear()

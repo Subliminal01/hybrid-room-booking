@@ -137,6 +137,33 @@ async function mockApi(page: Page) {
       });
     }
 
+    if (method === "GET" && path === "/admin/users") {
+      return fulfillJson(route, {
+        items: [userFor("worker"), userFor("host"), userFor("admin")],
+        total: 3,
+        limit: 8,
+        offset: 0,
+      });
+    }
+
+    if (method === "GET" && path === "/admin/bookings") {
+      return fulfillJson(route, {
+        items: [],
+        total: 0,
+        limit: 8,
+        offset: 0,
+      });
+    }
+
+    if (method === "GET" && path === "/admin/payments") {
+      return fulfillJson(route, {
+        items: [],
+        total: 0,
+        limit: 8,
+        offset: 0,
+      });
+    }
+
     if (method === "PATCH" && path === "/admin/workspaces/review-workspace-1/review") {
       return fulfillJson(route, workspace({ id: "review-workspace-1", review_status: "approved" }));
     }

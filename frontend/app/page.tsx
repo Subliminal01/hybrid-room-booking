@@ -21,8 +21,10 @@ import {
   Booking,
   BookingGroupReceipt,
   HostRevenueSummary,
+  Payment,
   TimeSlot,
   TokenResponse,
+  User,
   Workspace,
   WorkspaceStatus,
   cancelBookingGroup,
@@ -35,6 +37,9 @@ import {
   getBookingGroupReceipt,
   createWorkspace,
   getHostRevenueSummary,
+  listAdminBookings,
+  listAdminPayments,
+  listAdminUsers,
   listAuditEvents,
   listHostBookings,
   listMyWorkspaces,
@@ -176,6 +181,7 @@ const SESSION_STORAGE_KEY = "hybrid-stay-session";
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const BOOKING_PAGE_SIZE = 10;
 const AUDIT_PAGE_SIZE = 12;
+const ADMIN_PAGE_SIZE = 8;
 const DEFAULT_START_TIME = "09:00";
 const DEFAULT_END_TIME = "18:00";
 const MAX_WORKSPACE_PHOTO_BYTES = 5 * 1024 * 1024;
@@ -564,6 +570,12 @@ export default function Home() {
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [auditEventsTotal, setAuditEventsTotal] = useState(0);
+  const [adminUsers, setAdminUsers] = useState<User[]>([]);
+  const [adminUsersTotal, setAdminUsersTotal] = useState(0);
+  const [adminBookings, setAdminBookings] = useState<Booking[]>([]);
+  const [adminBookingsTotal, setAdminBookingsTotal] = useState(0);
+  const [adminPayments, setAdminPayments] = useState<Payment[]>([]);
+  const [adminPaymentsTotal, setAdminPaymentsTotal] = useState(0);
   const [availabilityDrafts, setAvailabilityDrafts] = useState<Record<string, AvailabilityDraft>>({});
   const [blackoutDrafts, setBlackoutDrafts] = useState<Record<string, BlackoutDraft>>({});
   const [listingDrafts, setListingDrafts] = useState<Record<string, ListingEditDraft>>({});
@@ -699,13 +711,22 @@ export default function Home() {
         setHostRevenue(revenue);
       }
       if (currentSession.user.role === "admin") {
-        const [reviewQueue, auditPage] = await Promise.all([
+        const [reviewQueue, auditPage, usersPage, bookingsPage, paymentsPage] = await Promise.all([
           listWorkspacesForReview(currentSession.access_token, "pending"),
           listAuditEvents(currentSession.access_token, { limit: AUDIT_PAGE_SIZE }),
+          listAdminUsers(currentSession.access_token, { limit: ADMIN_PAGE_SIZE }),
+          listAdminBookings(currentSession.access_token, { limit: ADMIN_PAGE_SIZE }),
+          listAdminPayments(currentSession.access_token, { limit: ADMIN_PAGE_SIZE }),
         ]);
         setReviewWorkspaces(reviewQueue);
         setAuditEvents(auditPage.items);
         setAuditEventsTotal(auditPage.total);
+        setAdminUsers(usersPage.items);
+        setAdminUsersTotal(usersPage.total);
+        setAdminBookings(bookingsPage.items);
+        setAdminBookingsTotal(bookingsPage.total);
+        setAdminPayments(paymentsPage.items);
+        setAdminPaymentsTotal(paymentsPage.total);
       }
     } catch {
       if (currentSession.refresh_token) {
@@ -753,6 +774,12 @@ export default function Home() {
     setReviewNotes({});
     setAuditEvents([]);
     setAuditEventsTotal(0);
+    setAdminUsers([]);
+    setAdminUsersTotal(0);
+    setAdminBookings([]);
+    setAdminBookingsTotal(0);
+    setAdminPayments([]);
+    setAdminPaymentsTotal(0);
     setListingDrafts({});
     setResults([]);
     setActiveTab("worker");
@@ -805,13 +832,22 @@ export default function Home() {
         setHostRevenue(revenue);
       }
       if (response.user.role === "admin") {
-        const [reviewQueue, auditPage] = await Promise.all([
+        const [reviewQueue, auditPage, usersPage, bookingsPage, paymentsPage] = await Promise.all([
           listWorkspacesForReview(response.access_token, "pending"),
           listAuditEvents(response.access_token, { limit: AUDIT_PAGE_SIZE }),
+          listAdminUsers(response.access_token, { limit: ADMIN_PAGE_SIZE }),
+          listAdminBookings(response.access_token, { limit: ADMIN_PAGE_SIZE }),
+          listAdminPayments(response.access_token, { limit: ADMIN_PAGE_SIZE }),
         ]);
         setReviewWorkspaces(reviewQueue);
         setAuditEvents(auditPage.items);
         setAuditEventsTotal(auditPage.total);
+        setAdminUsers(usersPage.items);
+        setAdminUsersTotal(usersPage.total);
+        setAdminBookings(bookingsPage.items);
+        setAdminBookingsTotal(bookingsPage.total);
+        setAdminPayments(paymentsPage.items);
+        setAdminPaymentsTotal(paymentsPage.total);
       }
     });
   }
@@ -1120,6 +1156,65 @@ export default function Home() {
     const page = await listAuditEvents(token, { limit: AUDIT_PAGE_SIZE });
     setAuditEvents(page.items);
     setAuditEventsTotal(page.total);
+  }
+
+  async function refreshAdminOperations(token = session?.access_token) {
+    if (!token || !isAdmin) {
+      return;
+    }
+    const [usersPage, bookingsPage, paymentsPage] = await Promise.all([
+      listAdminUsers(token, { limit: ADMIN_PAGE_SIZE }),
+      listAdminBookings(token, { limit: ADMIN_PAGE_SIZE }),
+      listAdminPayments(token, { limit: ADMIN_PAGE_SIZE }),
+    ]);
+    setAdminUsers(usersPage.items);
+    setAdminUsersTotal(usersPage.total);
+    setAdminBookings(bookingsPage.items);
+    setAdminBookingsTotal(bookingsPage.total);
+    setAdminPayments(paymentsPage.items);
+    setAdminPaymentsTotal(paymentsPage.total);
+  }
+
+  async function loadMoreAdminUsers() {
+    if (!session || !isAdmin) {
+      return;
+    }
+    await runAction(async () => {
+      const page = await listAdminUsers(session.access_token, {
+        limit: ADMIN_PAGE_SIZE,
+        offset: adminUsers.length,
+      });
+      setAdminUsers((current) => [...current, ...page.items]);
+      setAdminUsersTotal(page.total);
+    });
+  }
+
+  async function loadMoreAdminBookings() {
+    if (!session || !isAdmin) {
+      return;
+    }
+    await runAction(async () => {
+      const page = await listAdminBookings(session.access_token, {
+        limit: ADMIN_PAGE_SIZE,
+        offset: adminBookings.length,
+      });
+      setAdminBookings((current) => [...current, ...page.items]);
+      setAdminBookingsTotal(page.total);
+    });
+  }
+
+  async function loadMoreAdminPayments() {
+    if (!session || !isAdmin) {
+      return;
+    }
+    await runAction(async () => {
+      const page = await listAdminPayments(session.access_token, {
+        limit: ADMIN_PAGE_SIZE,
+        offset: adminPayments.length,
+      });
+      setAdminPayments((current) => [...current, ...page.items]);
+      setAdminPaymentsTotal(page.total);
+    });
   }
 
   async function loadMoreAuditEvents() {
@@ -2173,6 +2268,152 @@ export default function Home() {
                         </div>
                       ))
                     )}
+                  </div>
+                </div>
+              </section>
+
+              <section className="panel">
+                <div className="panel-header">
+                  <div>
+                    <h2>Admin Operations</h2>
+                    <div className="muted">
+                      Users, bookings, and payments across the marketplace
+                    </div>
+                  </div>
+                  <Wallet size={18} />
+                </div>
+                <div className="panel-body">
+                  <div className="button-row">
+                    <button
+                      className="btn secondary"
+                      type="button"
+                      onClick={() => runAction(() => refreshAdminOperations())}
+                      disabled={busy}
+                    >
+                      <History size={16} />
+                      Refresh operations
+                    </button>
+                  </div>
+
+                  <div className="ops-grid">
+                    <div>
+                      <div className="section-heading">
+                        <h3>Users</h3>
+                        <span className="muted">
+                          {adminUsers.length} of {adminUsersTotal}
+                        </span>
+                      </div>
+                      <div className="audit-list">
+                        {adminUsers.length === 0 ? (
+                          <div className="muted">Users will appear here.</div>
+                        ) : (
+                          adminUsers.map((user) => (
+                            <div className="audit-row" key={user.id}>
+                              <div>
+                                <strong>{user.full_name}</strong>
+                                <div className="muted">{user.email}</div>
+                              </div>
+                              <span className={`status ${user.is_active ? "" : "cancelled"}`}>
+                                {user.role}
+                              </span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      {adminUsers.length < adminUsersTotal ? (
+                        <button
+                          className="btn secondary"
+                          type="button"
+                          onClick={loadMoreAdminUsers}
+                          disabled={busy}
+                        >
+                          <History size={16} />
+                          Load more users
+                        </button>
+                      ) : null}
+                    </div>
+
+                    <div>
+                      <div className="section-heading">
+                        <h3>Bookings</h3>
+                        <span className="muted">
+                          {adminBookings.length} of {adminBookingsTotal}
+                        </span>
+                      </div>
+                      <div className="audit-list">
+                        {adminBookings.length === 0 ? (
+                          <div className="muted">Bookings will appear here.</div>
+                        ) : (
+                          adminBookings.map((booking) => (
+                            <div className="audit-row" key={booking.id}>
+                              <div>
+                                <strong>
+                                  {booking.workspace?.title ?? "Workspace booking"}
+                                </strong>
+                                <div className="muted">
+                                  {booking.user?.email ?? "Unknown worker"} · {formatDateTime(booking.start_at)}
+                                </div>
+                                <div className="muted">
+                                  {formatMoney(booking.total_price, booking.workspace?.currency ?? "INR")}
+                                </div>
+                              </div>
+                              <span className={`status ${booking.status}`}>{booking.status}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      {adminBookings.length < adminBookingsTotal ? (
+                        <button
+                          className="btn secondary"
+                          type="button"
+                          onClick={loadMoreAdminBookings}
+                          disabled={busy}
+                        >
+                          <History size={16} />
+                          Load more bookings
+                        </button>
+                      ) : null}
+                    </div>
+
+                    <div>
+                      <div className="section-heading">
+                        <h3>Payments</h3>
+                        <span className="muted">
+                          {adminPayments.length} of {adminPaymentsTotal}
+                        </span>
+                      </div>
+                      <div className="audit-list">
+                        {adminPayments.length === 0 ? (
+                          <div className="muted">Payments will appear here.</div>
+                        ) : (
+                          adminPayments.map((payment) => (
+                            <div className="audit-row" key={payment.id}>
+                              <div>
+                                <strong>{formatMoney(payment.amount, payment.currency)}</strong>
+                                <div className="muted">
+                                  {payment.provider} · {shortId(payment.booking_id)}
+                                </div>
+                                {payment.paid_at ? (
+                                  <div className="muted">Paid {formatDateTime(payment.paid_at)}</div>
+                                ) : null}
+                              </div>
+                              <span className={`status ${payment.status}`}>{payment.status}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      {adminPayments.length < adminPaymentsTotal ? (
+                        <button
+                          className="btn secondary"
+                          type="button"
+                          onClick={loadMoreAdminPayments}
+                          disabled={busy}
+                        >
+                          <History size={16} />
+                          Load more payments
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               </section>

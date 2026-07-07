@@ -193,6 +193,25 @@ a:hover {
   gap: 12px;
 }
 
+.ops-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.section-heading h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -920,6 +939,7 @@ a:hover {
 
 @media (max-width: 560px) {
   .grid-2,
+  .ops-grid,
   .slot-row,
   .inline-form,
   .audit-row,

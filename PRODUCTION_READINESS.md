@@ -19,6 +19,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 - Rota-based workspace search and multi-day booking groups.
 - Idempotent booking creation and stale pending-booking expiry.
 - Booking history, cancellation, receipts, host revenue, and admin audit logs.
+- Admin operations views for marketplace users, bookings, and payments.
 - Log and SMTP email-provider modes.
 - Mock, Razorpay, and Stripe payment-provider boundaries.
 - Signed payment webhook handling for success and failure events.
@@ -45,6 +46,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 - Frontend TypeScript check: passed.
 - Frontend production build: passed.
 - Frontend smoke test: passed against local frontend and backend.
+- Admin operations tests: passed.
 - Browser E2E assertions for worker, host, and admin flows: passed locally; the
   Windows Playwright runner intermittently hangs while closing Chromium after
   successful assertions.
@@ -65,7 +67,6 @@ payment-provider credentials, live domains, and provider webhook validation.
 
 ## Current Completion Estimate
 
-The application is about 95% complete for MVP production readiness. The
+The application is about 96% complete for MVP production readiness. The
 remaining work is mostly external setup and validation: real payment credentials,
-SMTP credentials, durable object storage for uploads, and admin operations
-polish.
+SMTP credentials, and durable object storage for uploads.

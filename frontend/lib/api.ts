@@ -113,7 +113,9 @@ export type Payment = {
   status: "pending" | "succeeded" | "failed" | "refunded";
   provider: string;
   provider_reference: string;
+  provider_checkout_reference: string | null;
   paid_at: string | null;
+  refunded_at: string | null;
 };
 
 export type BookingGroupCheckout = {
@@ -183,6 +185,20 @@ export type AuditEvent = {
 
 export type AuditEventPage = {
   items: AuditEvent[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type UserPage = {
+  items: User[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type PaymentPage = {
+  items: Payment[];
   total: number;
   limit: number;
   offset: number;
@@ -530,6 +546,51 @@ export function listAuditEvents(
     query.set("entity_type", params.entity_type);
   }
   return apiRequest<AuditEventPage>(`/admin/audit-events?${query.toString()}`, { token });
+}
+
+export function listAdminUsers(
+  token: string,
+  params: { limit?: number; offset?: number; role?: UserRole; is_active?: boolean } = {},
+) {
+  const query = new URLSearchParams();
+  query.set("limit", String(params.limit ?? 20));
+  query.set("offset", String(params.offset ?? 0));
+  if (params.role) {
+    query.set("role", params.role);
+  }
+  if (params.is_active !== undefined) {
+    query.set("is_active", String(params.is_active));
+  }
+  return apiRequest<UserPage>(`/admin/users?${query.toString()}`, { token });
+}
+
+export function listAdminBookings(
+  token: string,
+  params: { limit?: number; offset?: number; status?: BookingStatus } = {},
+) {
+  const query = new URLSearchParams();
+  query.set("limit", String(params.limit ?? 20));
+  query.set("offset", String(params.offset ?? 0));
+  if (params.status) {
+    query.set("status", params.status);
+  }
+  return apiRequest<BookingPage>(`/admin/bookings?${query.toString()}`, { token });
+}
+
+export function listAdminPayments(
+  token: string,
+  params: { limit?: number; offset?: number; status?: Payment["status"]; provider?: string } = {},
+) {
+  const query = new URLSearchParams();
+  query.set("limit", String(params.limit ?? 20));
+  query.set("offset", String(params.offset ?? 0));
+  if (params.status) {
+    query.set("status", params.status);
+  }
+  if (params.provider) {
+    query.set("provider", params.provider);
+  }
+  return apiRequest<PaymentPage>(`/admin/payments?${query.toString()}`, { token });
 }
 
 export function reviewWorkspace(
