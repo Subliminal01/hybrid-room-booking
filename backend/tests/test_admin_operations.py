@@ -155,6 +155,7 @@ def test_non_admin_cannot_list_admin_operations():
     assert client.get("/admin/users", headers=headers).status_code == 403
     assert client.get("/admin/bookings", headers=headers).status_code == 403
     assert client.get("/admin/payments", headers=headers).status_code == 403
+    assert client.get("/admin/payment-provider/status", headers=headers).status_code == 403
 
     app.dependency_overrides.clear()
 
@@ -193,6 +194,58 @@ def test_non_admin_cannot_send_email_delivery_test():
     )
 
     assert response.status_code == 403
+
+    app.dependency_overrides.clear()
+
+
+def test_admin_can_read_mock_payment_provider_status():
+    client, admin, *_ = setup_admin_fixture()
+
+    response = client.get(
+        "/admin/payment-provider/status",
+        headers={"Authorization": f"Bearer {admin['access_token']}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "mock"
+    assert body["ready"] is True
+    assert body["manual_confirmation_enabled"] is True
+    assert body["required_settings"] == []
+    assert body["missing_settings"] == []
+    assert body["webhook_url"] == "http://testserver/payments/webhooks/mock"
+
+    app.dependency_overrides.clear()
+
+
+def test_admin_payment_provider_status_reports_missing_razorpay_settings(monkeypatch):
+    client, admin, *_ = setup_admin_fixture()
+    monkeypatch.setattr("app.main.settings.payment_provider", "razorpay")
+    monkeypatch.setattr("app.main.settings.razorpay_key_id", "rzp_test_key")
+    monkeypatch.setattr("app.main.settings.razorpay_key_secret", None)
+    monkeypatch.setattr("app.main.settings.razorpay_webhook_secret", None)
+    monkeypatch.setattr("app.main.settings.public_api_base_url", "https://api.example.com")
+
+    response = client.get(
+        "/admin/payment-provider/status",
+        headers={"Authorization": f"Bearer {admin['access_token']}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "razorpay"
+    assert body["ready"] is False
+    assert body["manual_confirmation_enabled"] is False
+    assert body["required_settings"] == [
+        "RAZORPAY_KEY_ID",
+        "RAZORPAY_KEY_SECRET",
+        "RAZORPAY_WEBHOOK_SECRET",
+    ]
+    assert body["missing_settings"] == [
+        "RAZORPAY_KEY_SECRET",
+        "RAZORPAY_WEBHOOK_SECRET",
+    ]
+    assert body["webhook_url"] == "https://api.example.com/payments/webhooks/razorpay"
 
     app.dependency_overrides.clear()
 

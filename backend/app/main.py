@@ -73,6 +73,7 @@ from app.payment_service import (
 from app.rate_limit import configure_rate_limiting
 from app.schemas import (
     AdminEmailTestResponse,
+    AdminPaymentProviderStatusResponse,
     AuditEventPageResponse,
     AuditEventResponse,
     AvailabilityRuleResponse,
@@ -560,6 +561,37 @@ def send_admin_email_test(
         message="Test email sent",
         provider=settings.email_provider,
         recipient=current_user.email,
+    )
+
+
+@app.get("/admin/payment-provider/status", response_model=AdminPaymentProviderStatusResponse)
+def read_admin_payment_provider_status(
+    request: Request,
+    current_user: User = Depends(require_admin_user),
+) -> AdminPaymentProviderStatusResponse:
+    provider_settings = {
+        "mock": [],
+        "razorpay": [
+            ("RAZORPAY_KEY_ID", settings.razorpay_key_id),
+            ("RAZORPAY_KEY_SECRET", settings.razorpay_key_secret),
+            ("RAZORPAY_WEBHOOK_SECRET", settings.razorpay_webhook_secret),
+        ],
+        "stripe": [
+            ("STRIPE_SECRET_KEY", settings.stripe_secret_key),
+            ("STRIPE_WEBHOOK_SECRET", settings.stripe_webhook_secret),
+        ],
+    }
+    provider_requirements = provider_settings.get(settings.payment_provider, [])
+    missing_settings = [name for name, value in provider_requirements if not value]
+    public_base_url = settings.public_api_base_url or str(request.base_url).rstrip("/")
+    webhook_url = f"{public_base_url}/payments/webhooks/{settings.payment_provider}"
+    return AdminPaymentProviderStatusResponse(
+        provider=settings.payment_provider,
+        ready=len(missing_settings) == 0,
+        webhook_url=webhook_url,
+        required_settings=[name for name, _ in provider_requirements],
+        missing_settings=missing_settings,
+        manual_confirmation_enabled=settings.payment_provider == "mock",
     )
 
 

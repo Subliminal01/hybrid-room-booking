@@ -22,6 +22,7 @@ import {
   BookingGroupReceipt,
   HostRevenueSummary,
   Payment,
+  PaymentProviderStatus,
   TimeSlot,
   TokenResponse,
   User,
@@ -34,6 +35,7 @@ import {
   confirmPasswordReset,
   createBookingGroupCheckoutSession,
   createBooking,
+  getAdminPaymentProviderStatus,
   getBookingGroupReceipt,
   createWorkspace,
   getHostRevenueSummary,
@@ -577,6 +579,8 @@ export default function Home() {
   const [adminBookingsTotal, setAdminBookingsTotal] = useState(0);
   const [adminPayments, setAdminPayments] = useState<Payment[]>([]);
   const [adminPaymentsTotal, setAdminPaymentsTotal] = useState(0);
+  const [paymentProviderStatus, setPaymentProviderStatus] =
+    useState<PaymentProviderStatus | null>(null);
   const [availabilityDrafts, setAvailabilityDrafts] = useState<Record<string, AvailabilityDraft>>({});
   const [blackoutDrafts, setBlackoutDrafts] = useState<Record<string, BlackoutDraft>>({});
   const [listingDrafts, setListingDrafts] = useState<Record<string, ListingEditDraft>>({});
@@ -712,12 +716,20 @@ export default function Home() {
         setHostRevenue(revenue);
       }
       if (currentSession.user.role === "admin") {
-        const [reviewQueue, auditPage, usersPage, bookingsPage, paymentsPage] = await Promise.all([
+        const [
+          reviewQueue,
+          auditPage,
+          usersPage,
+          bookingsPage,
+          paymentsPage,
+          providerStatus,
+        ] = await Promise.all([
           listWorkspacesForReview(currentSession.access_token, "pending"),
           listAuditEvents(currentSession.access_token, { limit: AUDIT_PAGE_SIZE }),
           listAdminUsers(currentSession.access_token, { limit: ADMIN_PAGE_SIZE }),
           listAdminBookings(currentSession.access_token, { limit: ADMIN_PAGE_SIZE }),
           listAdminPayments(currentSession.access_token, { limit: ADMIN_PAGE_SIZE }),
+          getAdminPaymentProviderStatus(currentSession.access_token),
         ]);
         setReviewWorkspaces(reviewQueue);
         setAuditEvents(auditPage.items);
@@ -728,6 +740,7 @@ export default function Home() {
         setAdminBookingsTotal(bookingsPage.total);
         setAdminPayments(paymentsPage.items);
         setAdminPaymentsTotal(paymentsPage.total);
+        setPaymentProviderStatus(providerStatus);
       }
     } catch {
       if (currentSession.refresh_token) {
@@ -781,6 +794,7 @@ export default function Home() {
     setAdminBookingsTotal(0);
     setAdminPayments([]);
     setAdminPaymentsTotal(0);
+    setPaymentProviderStatus(null);
     setListingDrafts({});
     setResults([]);
     setActiveTab("worker");
@@ -833,12 +847,20 @@ export default function Home() {
         setHostRevenue(revenue);
       }
       if (response.user.role === "admin") {
-        const [reviewQueue, auditPage, usersPage, bookingsPage, paymentsPage] = await Promise.all([
+        const [
+          reviewQueue,
+          auditPage,
+          usersPage,
+          bookingsPage,
+          paymentsPage,
+          providerStatus,
+        ] = await Promise.all([
           listWorkspacesForReview(response.access_token, "pending"),
           listAuditEvents(response.access_token, { limit: AUDIT_PAGE_SIZE }),
           listAdminUsers(response.access_token, { limit: ADMIN_PAGE_SIZE }),
           listAdminBookings(response.access_token, { limit: ADMIN_PAGE_SIZE }),
           listAdminPayments(response.access_token, { limit: ADMIN_PAGE_SIZE }),
+          getAdminPaymentProviderStatus(response.access_token),
         ]);
         setReviewWorkspaces(reviewQueue);
         setAuditEvents(auditPage.items);
@@ -849,6 +871,7 @@ export default function Home() {
         setAdminBookingsTotal(bookingsPage.total);
         setAdminPayments(paymentsPage.items);
         setAdminPaymentsTotal(paymentsPage.total);
+        setPaymentProviderStatus(providerStatus);
       }
     });
   }
@@ -1163,10 +1186,11 @@ export default function Home() {
     if (!token || !isAdmin) {
       return;
     }
-    const [usersPage, bookingsPage, paymentsPage] = await Promise.all([
+    const [usersPage, bookingsPage, paymentsPage, providerStatus] = await Promise.all([
       listAdminUsers(token, { limit: ADMIN_PAGE_SIZE }),
       listAdminBookings(token, { limit: ADMIN_PAGE_SIZE }),
       listAdminPayments(token, { limit: ADMIN_PAGE_SIZE }),
+      getAdminPaymentProviderStatus(token),
     ]);
     setAdminUsers(usersPage.items);
     setAdminUsersTotal(usersPage.total);
@@ -1174,6 +1198,7 @@ export default function Home() {
     setAdminBookingsTotal(bookingsPage.total);
     setAdminPayments(paymentsPage.items);
     setAdminPaymentsTotal(paymentsPage.total);
+    setPaymentProviderStatus(providerStatus);
   }
 
   async function loadMoreAdminUsers() {
@@ -2314,6 +2339,35 @@ export default function Home() {
                       Send email test
                     </button>
                   </div>
+
+                  {paymentProviderStatus ? (
+                    <div className="audit-row">
+                      <div>
+                        <strong>Payment provider: {paymentProviderStatus.provider}</strong>
+                        <div className="muted">
+                          Webhook URL: {paymentProviderStatus.webhook_url}
+                        </div>
+                        <div className="muted">
+                          Manual confirmation{" "}
+                          {paymentProviderStatus.manual_confirmation_enabled
+                            ? "enabled for mock payments"
+                            : "disabled for real providers"}
+                        </div>
+                        {paymentProviderStatus.missing_settings.length > 0 ? (
+                          <div className="muted">
+                            Missing: {paymentProviderStatus.missing_settings.join(", ")}
+                          </div>
+                        ) : null}
+                      </div>
+                      <span
+                        className={`status ${
+                          paymentProviderStatus.ready ? "confirmed" : "pending"
+                        }`}
+                      >
+                        {paymentProviderStatus.ready ? "ready" : "setup needed"}
+                      </span>
+                    </div>
+                  ) : null}
 
                   <div className="ops-grid">
                     <div>

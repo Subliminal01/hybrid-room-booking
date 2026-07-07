@@ -148,6 +148,15 @@ Providers:
 Real providers must confirm payments through signed webhooks. Manual payment
 confirmation endpoints are mock-only.
 
+Admins can verify the active payment configuration from the dashboard under
+Admin Operations. The payment provider status block shows the active provider,
+whether required secrets are present, and the exact webhook URL to paste into
+the provider dashboard. For the Render deployment, the Razorpay webhook URL is:
+
+```text
+https://hybrid-room-booking-api.onrender.com/payments/webhooks/razorpay
+```
+
 ## 6. Health Checks
 
 Use:

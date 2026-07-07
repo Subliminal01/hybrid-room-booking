@@ -204,6 +204,15 @@ export type PaymentPage = {
   offset: number;
 };
 
+export type PaymentProviderStatus = {
+  provider: string;
+  ready: boolean;
+  webhook_url: string;
+  required_settings: string[];
+  missing_settings: string[];
+  manual_confirmation_enabled: boolean;
+};
+
 type RequestOptions = {
   token?: string;
   method?: string;
@@ -591,6 +600,10 @@ export function listAdminPayments(
     query.set("provider", params.provider);
   }
   return apiRequest<PaymentPage>(`/admin/payments?${query.toString()}`, { token });
+}
+
+export function getAdminPaymentProviderStatus(token: string) {
+  return apiRequest<PaymentProviderStatus>("/admin/payment-provider/status", { token });
 }
 
 export function sendAdminEmailTest(token: string) {

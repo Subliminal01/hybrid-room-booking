@@ -1,6 +1,6 @@
 # Production Readiness Summary
 
-Last verified: 2026-07-06
+Last verified: 2026-07-07
 
 ## Status
 
@@ -22,6 +22,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 - Idempotent booking creation and stale pending-booking expiry.
 - Booking history, cancellation, receipts, host revenue, and admin audit logs.
 - Admin operations views for marketplace users, bookings, and payments.
+- Admin payment-provider status check with safe Razorpay/Stripe setup diagnostics.
 - Log and SMTP email-provider modes.
 - Mock, Razorpay, and Stripe payment-provider boundaries.
 - Signed payment webhook handling for success and failure events.
@@ -51,6 +52,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 - Frontend smoke test: passed against local frontend and backend.
 - Admin operations tests: passed.
 - Admin SMTP test-email endpoint tests: passed.
+- Admin payment-provider status tests: passed.
 - Browser E2E assertions for worker, host, and admin flows: passed locally; the
   Windows Playwright runner intermittently hangs while closing Chromium after
   successful assertions.
@@ -67,6 +69,8 @@ payment-provider credentials, live domains, and provider webhook validation.
 - Configure `SENTRY_DSN` in Render for backend exception tracing.
 - Configure provider webhook URL:
   `POST https://your-api.example.com/payments/webhooks/{provider}`.
+- Confirm the admin payment-provider status block shows `ready` after provider
+  credentials are deployed.
 - Complete one payment-provider sandbox transaction and verify the signed
   webhook confirms the booking group.
 - Run post-deploy smoke and uptime checks from `DEPLOYMENT.md`.

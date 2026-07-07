@@ -164,6 +164,17 @@ async function mockApi(page: Page) {
       });
     }
 
+    if (method === "GET" && path === "/admin/payment-provider/status") {
+      return fulfillJson(route, {
+        provider: "mock",
+        ready: true,
+        webhook_url: "http://localhost:8000/payments/webhooks/mock",
+        required_settings: [],
+        missing_settings: [],
+        manual_confirmation_enabled: true,
+      });
+    }
+
     if (method === "POST" && path === "/admin/email/test") {
       return fulfillJson(route, {
         message: "Test email sent",

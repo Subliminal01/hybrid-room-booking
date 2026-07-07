@@ -152,6 +152,15 @@ class AdminEmailTestResponse(BaseModel):
     recipient: str
 
 
+class AdminPaymentProviderStatusResponse(BaseModel):
+    provider: str
+    ready: bool
+    webhook_url: str
+    required_settings: list[str]
+    missing_settings: list[str]
+    manual_confirmation_enabled: bool
+
+
 class TimeSlot(BaseModel):
     start_at: datetime
     end_at: datetime
