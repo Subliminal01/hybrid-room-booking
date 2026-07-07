@@ -243,7 +243,7 @@ def test_workspace_photo_url_must_be_https():
 
 def test_host_can_upload_workspace_photo(tmp_path, monkeypatch):
     app.dependency_overrides[get_session] = make_session_override()
-    monkeypatch.setattr(main_module, "workspace_upload_dir", tmp_path)
+    monkeypatch.setattr(main_module.storage_service, "upload_root", tmp_path)
     client = TestClient(app)
     token = register_user(client, email="host@example.com", role="host")
     created = client.post(
@@ -262,14 +262,14 @@ def test_host_can_upload_workspace_photo(tmp_path, monkeypatch):
     uploaded = upload_response.json()
     assert uploaded["photo_url"].startswith("http://testserver/uploads/workspaces/")
     assert uploaded["photo_url"].endswith(".png")
-    assert len(list(tmp_path.iterdir())) == 1
+    assert len(list((tmp_path / "workspaces").iterdir())) == 1
 
     app.dependency_overrides.clear()
 
 
 def test_workspace_photo_upload_rejects_invalid_file_type(tmp_path, monkeypatch):
     app.dependency_overrides[get_session] = make_session_override()
-    monkeypatch.setattr(main_module, "workspace_upload_dir", tmp_path)
+    monkeypatch.setattr(main_module.storage_service, "upload_root", tmp_path)
     client = TestClient(app)
     token = register_user(client, email="host@example.com", role="host")
     created = client.post(
@@ -293,7 +293,7 @@ def test_workspace_photo_upload_rejects_invalid_file_type(tmp_path, monkeypatch)
 
 def test_workspace_photo_upload_requires_owner(tmp_path, monkeypatch):
     app.dependency_overrides[get_session] = make_session_override()
-    monkeypatch.setattr(main_module, "workspace_upload_dir", tmp_path)
+    monkeypatch.setattr(main_module.storage_service, "upload_root", tmp_path)
     client = TestClient(app)
     owner_token = register_user(client, email="owner@example.com", role="host")
     other_token = register_user(client, email="other@example.com", role="host")

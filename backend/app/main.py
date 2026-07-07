@@ -1,8 +1,6 @@
 import hashlib
 import json
-from pathlib import Path
 from decimal import Decimal
-from uuid import uuid4
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -114,15 +112,15 @@ from app.schemas import (
     WorkspaceUpdateRequest,
 )
 from app.security import hash_password, verify_password
+from app.storage_service import get_storage_service
 
 settings = get_settings()
 configure_logging(settings.log_level)
 configure_error_tracking(settings)
 app = FastAPI(title="Hybrid Room Booking API")
-upload_root = Path(settings.upload_dir).resolve()
-workspace_upload_dir = upload_root / "workspaces"
-workspace_upload_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=upload_root), name="uploads")
+storage_service = get_storage_service(settings)
+if settings.storage_provider == "local":
+    app.mount("/uploads", StaticFiles(directory=storage_service.upload_root), name="uploads")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -136,19 +134,6 @@ configure_rate_limiting(
     trust_proxy_headers=settings.trust_proxy_headers,
 )
 configure_observability(app)
-
-ALLOWED_WORKSPACE_IMAGE_TYPES = {
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-    "image/webp": ".webp",
-}
-
-
-def workspace_photo_url(request: Request, filename: str) -> str:
-    if settings.public_api_base_url:
-        return f"{settings.public_api_base_url.rstrip('/')}/uploads/workspaces/{filename}"
-    return str(request.url_for("uploads", path=f"workspaces/{filename}"))
-
 
 def get_owned_workspace(
     workspace_id: UUID,
@@ -167,39 +152,6 @@ def get_owned_workspace(
             detail="You can only update your own workspaces",
         )
     return workspace
-
-
-async def save_workspace_photo(file: UploadFile) -> str:
-    extension = ALLOWED_WORKSPACE_IMAGE_TYPES.get(file.content_type or "")
-    if extension is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Workspace photo must be a JPEG, PNG, or WebP image",
-        )
-
-    filename = f"{uuid4().hex}{extension}"
-    destination = workspace_upload_dir / filename
-    total_bytes = 0
-    with destination.open("wb") as output:
-        while chunk := await file.read(1024 * 1024):
-            total_bytes += len(chunk)
-            if total_bytes > settings.max_upload_bytes:
-                output.close()
-                destination.unlink(missing_ok=True)
-                raise HTTPException(
-                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                    detail="Workspace photo is too large",
-                )
-            output.write(chunk)
-
-    if total_bytes == 0:
-        destination.unlink(missing_ok=True)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Workspace photo cannot be empty",
-        )
-
-    return filename
 
 
 def can_access_booking(booking: Booking, current_user: User, session: Session) -> bool:
@@ -788,8 +740,8 @@ async def upload_workspace_photo(
     session: Session = Depends(get_session),
 ) -> Workspace:
     workspace = get_owned_workspace(workspace_id, current_user, session)
-    filename = await save_workspace_photo(file)
-    workspace.photo_url = workspace_photo_url(request, filename)
+    base_url = settings.public_api_base_url or str(request.base_url).rstrip("/")
+    workspace.photo_url = await storage_service.upload_workspace_photo(file, base_url)
     session.add(workspace)
     session.commit()
     session.refresh(workspace)

@@ -83,6 +83,20 @@ Workspace photo uploads are stored under `UPLOAD_DIR` and served from
 durable on many free hosts. Before public launch, move uploads to object storage
 such as S3, Cloudflare R2, or another managed media store.
 
+To enable durable S3-compatible storage, set:
+
+```env
+STORAGE_PROVIDER=s3
+S3_BUCKET=your-bucket
+S3_REGION=auto
+S3_ENDPOINT_URL=https://your-account.r2.cloudflarestorage.com
+S3_ACCESS_KEY_ID=...
+S3_SECRET_ACCESS_KEY=...
+S3_PUBLIC_BASE_URL=https://your-public-bucket-domain
+```
+
+`S3_PUBLIC_BASE_URL` must be an HTTPS URL that serves public workspace photos.
+
 `AUTH_RATE_LIMIT_PER_MINUTE` applies to sensitive auth routes by both source IP
 and normalized account email where available. Set `TRUST_PROXY_HEADERS=1` only
 when the app is behind a trusted platform proxy such as Render; otherwise leave

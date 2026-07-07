@@ -16,6 +16,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 - Email verification and password reset service boundaries with SMTP delivery support.
 - Workspace listing, host availability, blackout dates, and admin moderation.
 - Host workspace photo uploads with file type and size validation.
+- Local and S3-compatible durable object storage modes for workspace photo uploads.
 - Rota-based workspace search and multi-day booking groups.
 - Idempotent booking creation and stale pending-booking expiry.
 - Booking history, cancellation, receipts, host revenue, and admin audit logs.
@@ -42,6 +43,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 
 - Backend full test suite: `83 passed, 1 warning`.
 - Backend release check: passed.
+- Storage configuration and workspace upload tests: passed.
 - Backend HTTP smoke test: passed end to end with mock payments.
 - Frontend TypeScript check: passed.
 - Frontend production build: passed.
@@ -58,6 +60,8 @@ payment-provider credentials, live domains, and provider webhook validation.
 - Set `NEXT_PUBLIC_API_BASE_URL` for the deployed frontend.
 - Configure Razorpay or Stripe sandbox/live credentials.
 - Configure SMTP transactional-email credentials.
+- Configure durable object storage credentials with `STORAGE_PROVIDER=s3` before
+  relying on hosted workspace photos.
 - Configure `SENTRY_DSN` in Render for backend exception tracing.
 - Configure provider webhook URL:
   `POST https://your-api.example.com/payments/webhooks/{provider}`.
@@ -67,6 +71,6 @@ payment-provider credentials, live domains, and provider webhook validation.
 
 ## Current Completion Estimate
 
-The application is about 96% complete for MVP production readiness. The
+The application is about 97% complete for MVP production readiness. The
 remaining work is mostly external setup and validation: real payment credentials,
-SMTP credentials, and durable object storage for uploads.
+SMTP credentials, and deployed object-storage credentials.

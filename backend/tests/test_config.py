@@ -225,6 +225,44 @@ def test_rejects_unknown_email_provider(monkeypatch):
     clear_settings_cache()
 
 
+def test_accepts_s3_storage_settings(monkeypatch):
+    clear_settings_cache()
+    monkeypatch.setenv("STORAGE_PROVIDER", "s3")
+    monkeypatch.setenv("S3_BUCKET", "workspace-photos")
+    monkeypatch.setenv("S3_ACCESS_KEY_ID", "access-key")
+    monkeypatch.setenv("S3_SECRET_ACCESS_KEY", "secret-key")
+    monkeypatch.setenv("S3_PUBLIC_BASE_URL", "https://cdn.example.com")
+
+    settings = get_settings()
+
+    assert settings.storage_provider == "s3"
+    assert settings.s3_bucket == "workspace-photos"
+    assert settings.s3_public_base_url == "https://cdn.example.com"
+
+    clear_settings_cache()
+
+
+def test_s3_storage_requires_credentials(monkeypatch):
+    clear_settings_cache()
+    monkeypatch.setenv("STORAGE_PROVIDER", "s3")
+    monkeypatch.setenv("S3_BUCKET", "workspace-photos")
+
+    with pytest.raises(ConfigError, match="S3_ACCESS_KEY_ID"):
+        get_settings()
+
+    clear_settings_cache()
+
+
+def test_rejects_unknown_storage_provider(monkeypatch):
+    clear_settings_cache()
+    monkeypatch.setenv("STORAGE_PROVIDER", "ftp")
+
+    with pytest.raises(ConfigError, match="STORAGE_PROVIDER"):
+        get_settings()
+
+    clear_settings_cache()
+
+
 def test_production_rejects_log_email_provider_without_override(monkeypatch):
     clear_settings_cache()
     monkeypatch.setenv("APP_ENV", "production")

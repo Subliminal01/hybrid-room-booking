@@ -27,6 +27,8 @@ services:
         value: uploads
       - key: MAX_UPLOAD_BYTES
         value: 5242880
+      - key: STORAGE_PROVIDER
+        value: local
       - key: LOG_LEVEL
         value: INFO
       - key: SENTRY_DSN

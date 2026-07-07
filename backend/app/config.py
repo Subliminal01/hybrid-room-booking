@@ -8,6 +8,7 @@ DEV_CORS_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000"
 PRODUCTION_ENV_NAMES = {"prod", "production"}
 SUPPORTED_PAYMENT_PROVIDERS = {"mock", "razorpay", "stripe"}
 SUPPORTED_EMAIL_PROVIDERS = {"log", "smtp"}
+SUPPORTED_STORAGE_PROVIDERS = {"local", "s3"}
 WEAK_SECRET_VALUES = {
     "",
     DEV_AUTH_SECRET_KEY,
@@ -99,6 +100,13 @@ class Settings:
         self.upload_dir = getenv("UPLOAD_DIR", "uploads").strip() or "uploads"
         self.max_upload_bytes = parse_int_env("MAX_UPLOAD_BYTES", 5 * 1024 * 1024)
         self.public_api_base_url = parse_optional_env("PUBLIC_API_BASE_URL")
+        self.storage_provider = getenv("STORAGE_PROVIDER", "local").strip().lower()
+        self.s3_bucket = parse_optional_env("S3_BUCKET")
+        self.s3_region = getenv("S3_REGION", "auto").strip()
+        self.s3_endpoint_url = parse_optional_env("S3_ENDPOINT_URL")
+        self.s3_access_key_id = parse_optional_env("S3_ACCESS_KEY_ID")
+        self.s3_secret_access_key = parse_optional_env("S3_SECRET_ACCESS_KEY")
+        self.s3_public_base_url = parse_optional_env("S3_PUBLIC_BASE_URL")
         self.frontend_base_url = getenv("FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
         self.email_from = getenv("EMAIL_FROM", "noreply@hybridrooms.local")
         self.email_provider = getenv("EMAIL_PROVIDER", "log").strip().lower()
@@ -140,6 +148,28 @@ class Settings:
                 "EMAIL_PROVIDER must be one of: "
                 + ", ".join(sorted(SUPPORTED_EMAIL_PROVIDERS))
             )
+
+        if self.storage_provider not in SUPPORTED_STORAGE_PROVIDERS:
+            raise ConfigError(
+                "STORAGE_PROVIDER must be one of: "
+                + ", ".join(sorted(SUPPORTED_STORAGE_PROVIDERS))
+            )
+
+        if self.storage_provider == "s3":
+            missing = [
+                name
+                for name, value in {
+                    "S3_BUCKET": self.s3_bucket,
+                    "S3_ACCESS_KEY_ID": self.s3_access_key_id,
+                    "S3_SECRET_ACCESS_KEY": self.s3_secret_access_key,
+                    "S3_PUBLIC_BASE_URL": self.s3_public_base_url,
+                }.items()
+                if not value
+            ]
+            if missing:
+                raise ConfigError(f"Missing S3 storage settings: {', '.join(missing)}")
+            if self.s3_public_base_url and not self.s3_public_base_url.startswith("https://"):
+                raise ConfigError("S3_PUBLIC_BASE_URL must use https://")
 
         if not 0 <= self.sentry_traces_sample_rate <= 1:
             raise ConfigError("SENTRY_TRACES_SAMPLE_RATE must be between 0 and 1")
