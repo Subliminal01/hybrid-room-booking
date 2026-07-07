@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 import sys
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -37,8 +38,21 @@ def check_frontend(url: str, *, timeout: int) -> None:
     print(f"frontend: ok ({status})")
 
 
-def check_backend(url: str, *, timeout: int) -> None:
-    status, body = fetch(url, timeout=timeout)
+def check_backend(url: str, *, timeout: int, attempts: int, retry_delay: int) -> None:
+    last_error: UptimeCheckError | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            status, body = fetch(url, timeout=timeout)
+            break
+        except UptimeCheckError as exc:
+            last_error = exc
+            if attempt == attempts:
+                raise
+            print(f"backend: attempt {attempt} failed, retrying in {retry_delay}s")
+            time.sleep(retry_delay)
+    else:
+        raise last_error or UptimeCheckError("Backend readiness could not be checked")
+
     if status != 200:
         raise UptimeCheckError(f"Backend readiness returned HTTP {status}")
     try:
@@ -55,6 +69,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--frontend-url", default=DEFAULT_FRONTEND_URL)
     parser.add_argument("--backend-ready-url", default=DEFAULT_BACKEND_READY_URL)
     parser.add_argument("--timeout", type=int, default=20)
+    parser.add_argument("--backend-timeout", type=int, default=60)
+    parser.add_argument("--backend-attempts", type=int, default=4)
+    parser.add_argument("--backend-retry-delay", type=int, default=15)
     return parser.parse_args()
 
 
@@ -62,7 +79,12 @@ def main() -> int:
     args = parse_args()
     try:
         check_frontend(args.frontend_url, timeout=args.timeout)
-        check_backend(args.backend_ready_url, timeout=args.timeout)
+        check_backend(
+            args.backend_ready_url,
+            timeout=args.backend_timeout,
+            attempts=args.backend_attempts,
+            retry_delay=args.backend_retry_delay,
+        )
     except UptimeCheckError as exc:
         print(f"uptime check failed: {exc}", file=sys.stderr)
         return 1
