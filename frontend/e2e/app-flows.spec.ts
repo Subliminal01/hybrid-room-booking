@@ -164,6 +164,21 @@ async function mockApi(page: Page) {
       });
     }
 
+    if (method === "GET" && path === "/admin/email/status") {
+      return fulfillJson(route, {
+        provider: "log",
+        ready: true,
+        from_address: "noreply@hybridrooms.local",
+        smtp_host: null,
+        smtp_port: null,
+        smtp_use_tls: true,
+        smtp_use_ssl: false,
+        required_settings: [],
+        missing_settings: [],
+        test_supported: true,
+      });
+    }
+
     if (method === "GET" && path === "/admin/payment-provider/status") {
       return fulfillJson(route, {
         provider: "mock",

@@ -81,6 +81,8 @@ reset emails.
 After SMTP credentials are configured, sign in as an admin and use **Send email
 test** in Admin Operations. A successful response means the API could connect to
 the SMTP provider and send to the admin account email.
+The email provider status block in Admin Operations shows whether SMTP is
+configured and which safe, non-secret settings are still missing.
 
 Workspace photo uploads are stored under `UPLOAD_DIR` and served from
 `/uploads`. This is acceptable for demos, but local instance storage is not

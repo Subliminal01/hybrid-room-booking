@@ -15,6 +15,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 - Worker, host, and admin authentication flows with access/refresh tokens.
 - Email verification and password reset service boundaries with SMTP delivery support.
 - Admin-triggered test email endpoint for SMTP delivery verification.
+- Admin email-provider status check with safe SMTP setup diagnostics.
 - Workspace listing, host availability, blackout dates, and admin moderation.
 - Host workspace photo uploads with file type and size validation.
 - Local and S3-compatible durable object storage modes for workspace photo uploads.
@@ -44,7 +45,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 
 ## Verified Locally
 
-- Backend full test suite: `123 passed, 1 warning`.
+- Backend full test suite: `125 passed, 1 warning`.
 - Backend release check: passed.
 - Storage configuration and workspace upload tests: passed.
 - Backend HTTP smoke test: passed end to end with mock payments.
@@ -53,6 +54,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 - Frontend smoke test: passed against local frontend and backend.
 - Admin operations tests: passed.
 - Admin SMTP test-email endpoint tests: passed.
+- Admin email-provider status tests: passed.
 - Admin payment-provider status tests: passed.
 - Admin upload-storage status tests: passed.
 - Browser E2E assertions for worker, host, and admin flows: passed locally; the
@@ -71,6 +73,8 @@ payment-provider credentials, live domains, and provider webhook validation.
 - Configure `SENTRY_DSN` in Render for backend exception tracing.
 - Configure provider webhook URL:
   `POST https://your-api.example.com/payments/webhooks/{provider}`.
+- Confirm the admin email-provider status block shows `ready`, then send one
+  admin test email.
 - Confirm the admin payment-provider status block shows `ready` after provider
   credentials are deployed.
 - Confirm the admin upload-storage status block shows durable S3-compatible

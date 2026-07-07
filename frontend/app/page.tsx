@@ -20,6 +20,7 @@ import {
   AvailabilityRule,
   Booking,
   BookingGroupReceipt,
+  EmailStatus,
   HostRevenueSummary,
   Payment,
   PaymentProviderStatus,
@@ -36,6 +37,7 @@ import {
   confirmPasswordReset,
   createBookingGroupCheckoutSession,
   createBooking,
+  getAdminEmailStatus,
   getAdminPaymentProviderStatus,
   getAdminStorageStatus,
   getBookingGroupReceipt,
@@ -581,6 +583,7 @@ export default function Home() {
   const [adminBookingsTotal, setAdminBookingsTotal] = useState(0);
   const [adminPayments, setAdminPayments] = useState<Payment[]>([]);
   const [adminPaymentsTotal, setAdminPaymentsTotal] = useState(0);
+  const [emailStatus, setEmailStatus] = useState<EmailStatus | null>(null);
   const [paymentProviderStatus, setPaymentProviderStatus] =
     useState<PaymentProviderStatus | null>(null);
   const [storageStatus, setStorageStatus] = useState<StorageStatus | null>(null);
@@ -725,6 +728,7 @@ export default function Home() {
           usersPage,
           bookingsPage,
           paymentsPage,
+          nextEmailStatus,
           providerStatus,
           nextStorageStatus,
         ] = await Promise.all([
@@ -733,6 +737,7 @@ export default function Home() {
           listAdminUsers(currentSession.access_token, { limit: ADMIN_PAGE_SIZE }),
           listAdminBookings(currentSession.access_token, { limit: ADMIN_PAGE_SIZE }),
           listAdminPayments(currentSession.access_token, { limit: ADMIN_PAGE_SIZE }),
+          getAdminEmailStatus(currentSession.access_token),
           getAdminPaymentProviderStatus(currentSession.access_token),
           getAdminStorageStatus(currentSession.access_token),
         ]);
@@ -745,6 +750,7 @@ export default function Home() {
         setAdminBookingsTotal(bookingsPage.total);
         setAdminPayments(paymentsPage.items);
         setAdminPaymentsTotal(paymentsPage.total);
+        setEmailStatus(nextEmailStatus);
         setPaymentProviderStatus(providerStatus);
         setStorageStatus(nextStorageStatus);
       }
@@ -800,6 +806,7 @@ export default function Home() {
     setAdminBookingsTotal(0);
     setAdminPayments([]);
     setAdminPaymentsTotal(0);
+    setEmailStatus(null);
     setPaymentProviderStatus(null);
     setStorageStatus(null);
     setListingDrafts({});
@@ -860,6 +867,7 @@ export default function Home() {
           usersPage,
           bookingsPage,
           paymentsPage,
+          nextEmailStatus,
           providerStatus,
           nextStorageStatus,
         ] = await Promise.all([
@@ -868,6 +876,7 @@ export default function Home() {
           listAdminUsers(response.access_token, { limit: ADMIN_PAGE_SIZE }),
           listAdminBookings(response.access_token, { limit: ADMIN_PAGE_SIZE }),
           listAdminPayments(response.access_token, { limit: ADMIN_PAGE_SIZE }),
+          getAdminEmailStatus(response.access_token),
           getAdminPaymentProviderStatus(response.access_token),
           getAdminStorageStatus(response.access_token),
         ]);
@@ -880,6 +889,7 @@ export default function Home() {
         setAdminBookingsTotal(bookingsPage.total);
         setAdminPayments(paymentsPage.items);
         setAdminPaymentsTotal(paymentsPage.total);
+        setEmailStatus(nextEmailStatus);
         setPaymentProviderStatus(providerStatus);
         setStorageStatus(nextStorageStatus);
       }
@@ -1196,11 +1206,18 @@ export default function Home() {
     if (!token || !isAdmin) {
       return;
     }
-    const [usersPage, bookingsPage, paymentsPage, providerStatus, nextStorageStatus] =
-      await Promise.all([
+    const [
+      usersPage,
+      bookingsPage,
+      paymentsPage,
+      nextEmailStatus,
+      providerStatus,
+      nextStorageStatus,
+    ] = await Promise.all([
         listAdminUsers(token, { limit: ADMIN_PAGE_SIZE }),
         listAdminBookings(token, { limit: ADMIN_PAGE_SIZE }),
         listAdminPayments(token, { limit: ADMIN_PAGE_SIZE }),
+        getAdminEmailStatus(token),
         getAdminPaymentProviderStatus(token),
         getAdminStorageStatus(token),
       ]);
@@ -1210,6 +1227,7 @@ export default function Home() {
     setAdminBookingsTotal(bookingsPage.total);
     setAdminPayments(paymentsPage.items);
     setAdminPaymentsTotal(paymentsPage.total);
+    setEmailStatus(nextEmailStatus);
     setPaymentProviderStatus(providerStatus);
     setStorageStatus(nextStorageStatus);
   }
@@ -2352,6 +2370,33 @@ export default function Home() {
                       Send email test
                     </button>
                   </div>
+
+                  {emailStatus ? (
+                    <div className="audit-row">
+                      <div>
+                        <strong>Email provider: {emailStatus.provider}</strong>
+                        <div className="muted">From: {emailStatus.from_address}</div>
+                        {emailStatus.smtp_host ? (
+                          <div className="muted">
+                            SMTP: {emailStatus.smtp_host}:{emailStatus.smtp_port}
+                            {emailStatus.smtp_use_ssl
+                              ? " SSL"
+                              : emailStatus.smtp_use_tls
+                                ? " TLS"
+                                : ""}
+                          </div>
+                        ) : null}
+                        {emailStatus.missing_settings.length > 0 ? (
+                          <div className="muted">
+                            Missing: {emailStatus.missing_settings.join(", ")}
+                          </div>
+                        ) : null}
+                      </div>
+                      <span className={`status ${emailStatus.ready ? "confirmed" : "pending"}`}>
+                        {emailStatus.ready ? "ready" : "setup needed"}
+                      </span>
+                    </div>
+                  ) : null}
 
                   {paymentProviderStatus ? (
                     <div className="audit-row">

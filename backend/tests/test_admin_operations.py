@@ -155,6 +155,7 @@ def test_non_admin_cannot_list_admin_operations():
     assert client.get("/admin/users", headers=headers).status_code == 403
     assert client.get("/admin/bookings", headers=headers).status_code == 403
     assert client.get("/admin/payments", headers=headers).status_code == 403
+    assert client.get("/admin/email/status", headers=headers).status_code == 403
     assert client.get("/admin/payment-provider/status", headers=headers).status_code == 403
     assert client.get("/admin/storage/status", headers=headers).status_code == 403
 
@@ -195,6 +196,67 @@ def test_non_admin_cannot_send_email_delivery_test():
     )
 
     assert response.status_code == 403
+
+    app.dependency_overrides.clear()
+
+
+def test_admin_can_read_log_email_status():
+    client, admin, *_ = setup_admin_fixture()
+
+    response = client.get(
+        "/admin/email/status",
+        headers={"Authorization": f"Bearer {admin['access_token']}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "log"
+    assert body["ready"] is True
+    assert body["from_address"] == "noreply@hybridrooms.local"
+    assert body["smtp_host"] is None
+    assert body["smtp_port"] is None
+    assert body["smtp_use_tls"] is True
+    assert body["smtp_use_ssl"] is False
+    assert body["required_settings"] == []
+    assert body["missing_settings"] == []
+    assert body["test_supported"] is True
+
+    app.dependency_overrides.clear()
+
+
+def test_admin_email_status_reports_missing_smtp_settings(monkeypatch):
+    client, admin, *_ = setup_admin_fixture()
+    monkeypatch.setattr("app.main.settings.email_provider", "smtp")
+    monkeypatch.setattr("app.main.settings.email_from", "support@example.com")
+    monkeypatch.setattr("app.main.settings.smtp_host", "smtp.example.com")
+    monkeypatch.setattr("app.main.settings.smtp_port", 587)
+    monkeypatch.setattr("app.main.settings.smtp_username", None)
+    monkeypatch.setattr("app.main.settings.smtp_password", None)
+    monkeypatch.setattr("app.main.settings.smtp_use_tls", True)
+    monkeypatch.setattr("app.main.settings.smtp_use_ssl", False)
+
+    response = client.get(
+        "/admin/email/status",
+        headers={"Authorization": f"Bearer {admin['access_token']}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "smtp"
+    assert body["ready"] is False
+    assert body["from_address"] == "support@example.com"
+    assert body["smtp_host"] == "smtp.example.com"
+    assert body["smtp_port"] == 587
+    assert body["required_settings"] == [
+        "SMTP_HOST",
+        "SMTP_USERNAME",
+        "SMTP_PASSWORD",
+    ]
+    assert body["missing_settings"] == [
+        "SMTP_USERNAME",
+        "SMTP_PASSWORD",
+    ]
+    assert body["test_supported"] is True
 
     app.dependency_overrides.clear()
 

@@ -152,6 +152,19 @@ class AdminEmailTestResponse(BaseModel):
     recipient: str
 
 
+class AdminEmailStatusResponse(BaseModel):
+    provider: str
+    ready: bool
+    from_address: str
+    smtp_host: str | None
+    smtp_port: int | None
+    smtp_use_tls: bool
+    smtp_use_ssl: bool
+    required_settings: list[str]
+    missing_settings: list[str]
+    test_supported: bool
+
+
 class AdminPaymentProviderStatusResponse(BaseModel):
     provider: str
     ready: bool

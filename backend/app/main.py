@@ -72,6 +72,7 @@ from app.payment_service import (
 )
 from app.rate_limit import configure_rate_limiting
 from app.schemas import (
+    AdminEmailStatusResponse,
     AdminEmailTestResponse,
     AdminPaymentProviderStatusResponse,
     AdminStorageStatusResponse,
@@ -562,6 +563,34 @@ def send_admin_email_test(
         message="Test email sent",
         provider=settings.email_provider,
         recipient=current_user.email,
+    )
+
+
+@app.get("/admin/email/status", response_model=AdminEmailStatusResponse)
+def read_admin_email_status(
+    current_user: User = Depends(require_admin_user),
+) -> AdminEmailStatusResponse:
+    provider_settings = {
+        "log": [],
+        "smtp": [
+            ("SMTP_HOST", settings.smtp_host),
+            ("SMTP_USERNAME", settings.smtp_username),
+            ("SMTP_PASSWORD", settings.smtp_password),
+        ],
+    }
+    provider_requirements = provider_settings.get(settings.email_provider, [])
+    missing_settings = [name for name, value in provider_requirements if not value]
+    return AdminEmailStatusResponse(
+        provider=settings.email_provider,
+        ready=len(missing_settings) == 0,
+        from_address=settings.email_from,
+        smtp_host=settings.smtp_host,
+        smtp_port=settings.smtp_port if settings.email_provider == "smtp" else None,
+        smtp_use_tls=settings.smtp_use_tls,
+        smtp_use_ssl=settings.smtp_use_ssl,
+        required_settings=[name for name, _ in provider_requirements],
+        missing_settings=missing_settings,
+        test_supported=True,
     )
 
 
