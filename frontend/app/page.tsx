@@ -55,6 +55,7 @@ import {
   refreshSession,
   reviewWorkspace,
   searchWorkspaces,
+  sendAdminEmailTest,
   updateMe,
   updateWorkspace,
   uploadWorkspacePhoto,
@@ -2292,6 +2293,25 @@ export default function Home() {
                     >
                       <History size={16} />
                       Refresh operations
+                    </button>
+                    <button
+                      className="btn secondary"
+                      type="button"
+                      onClick={() =>
+                        runAction(async () => {
+                          if (!session) {
+                            return;
+                          }
+                          const response = await sendAdminEmailTest(session.access_token);
+                          setMessage(
+                            `Test email sent to ${response.recipient} via ${response.provider}.`,
+                          );
+                        })
+                      }
+                      disabled={busy}
+                    >
+                      <MailCheck size={16} />
+                      Send email test
                     </button>
                   </div>
 

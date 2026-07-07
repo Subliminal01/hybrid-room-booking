@@ -4,6 +4,7 @@ from starlette.testclient import TestClient
 
 from app.auth_service import issue_user_session, register_user as register_user_service
 from app.database import get_session
+from app.email_service import EmailService
 from app.main import app
 from app.models import UserRole
 
@@ -154,6 +155,44 @@ def test_non_admin_cannot_list_admin_operations():
     assert client.get("/admin/users", headers=headers).status_code == 403
     assert client.get("/admin/bookings", headers=headers).status_code == 403
     assert client.get("/admin/payments", headers=headers).status_code == 403
+
+    app.dependency_overrides.clear()
+
+
+def test_admin_can_send_email_delivery_test(monkeypatch):
+    client, admin, *_ = setup_admin_fixture()
+    sent_to = []
+
+    def fake_send_admin_test_email(self, user):
+        sent_to.append(user.email)
+
+    monkeypatch.setattr(EmailService, "send_admin_test_email", fake_send_admin_test_email)
+
+    response = client.post(
+        "/admin/email/test",
+        headers={"Authorization": f"Bearer {admin['access_token']}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "message": "Test email sent",
+        "provider": "log",
+        "recipient": "admin@example.com",
+    }
+    assert sent_to == ["admin@example.com"]
+
+    app.dependency_overrides.clear()
+
+
+def test_non_admin_cannot_send_email_delivery_test():
+    client, _, _, worker, *_ = setup_admin_fixture()
+
+    response = client.post(
+        "/admin/email/test",
+        headers={"Authorization": f"Bearer {worker['access_token']}"},
+    )
+
+    assert response.status_code == 403
 
     app.dependency_overrides.clear()
 

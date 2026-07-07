@@ -72,6 +72,7 @@ from app.payment_service import (
 )
 from app.rate_limit import configure_rate_limiting
 from app.schemas import (
+    AdminEmailTestResponse,
     AuditEventPageResponse,
     AuditEventResponse,
     AvailabilityRuleResponse,
@@ -548,6 +549,18 @@ def list_workspaces_for_review(
     if review_status is not None:
         query = query.where(Workspace.review_status == review_status)
     return session.exec(query.order_by(Workspace.created_at.desc())).all()
+
+
+@app.post("/admin/email/test", response_model=AdminEmailTestResponse)
+def send_admin_email_test(
+    current_user: User = Depends(require_admin_user),
+) -> AdminEmailTestResponse:
+    get_email_service(settings).send_admin_test_email(current_user)
+    return AdminEmailTestResponse(
+        message="Test email sent",
+        provider=settings.email_provider,
+        recipient=current_user.email,
+    )
 
 
 @app.get("/admin/users", response_model=UserPageResponse)

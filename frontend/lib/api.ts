@@ -593,6 +593,13 @@ export function listAdminPayments(
   return apiRequest<PaymentPage>(`/admin/payments?${query.toString()}`, { token });
 }
 
+export function sendAdminEmailTest(token: string) {
+  return apiRequest<{ message: string; provider: string; recipient: string }>("/admin/email/test", {
+    token,
+    method: "POST",
+  });
+}
+
 export function reviewWorkspace(
   token: string,
   workspaceId: string,

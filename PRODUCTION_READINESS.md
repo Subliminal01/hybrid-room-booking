@@ -14,6 +14,7 @@ payment-provider credentials, live domains, and provider webhook validation.
   overlap protection for bookings.
 - Worker, host, and admin authentication flows with access/refresh tokens.
 - Email verification and password reset service boundaries with SMTP delivery support.
+- Admin-triggered test email endpoint for SMTP delivery verification.
 - Workspace listing, host availability, blackout dates, and admin moderation.
 - Host workspace photo uploads with file type and size validation.
 - Local and S3-compatible durable object storage modes for workspace photo uploads.
@@ -49,6 +50,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 - Frontend production build: passed.
 - Frontend smoke test: passed against local frontend and backend.
 - Admin operations tests: passed.
+- Admin SMTP test-email endpoint tests: passed.
 - Browser E2E assertions for worker, host, and admin flows: passed locally; the
   Windows Playwright runner intermittently hangs while closing Chromium after
   successful assertions.
@@ -71,6 +73,6 @@ payment-provider credentials, live domains, and provider webhook validation.
 
 ## Current Completion Estimate
 
-The application is about 97% complete for MVP production readiness. The
+The application is about 98% complete for MVP production readiness. The
 remaining work is mostly external setup and validation: real payment credentials,
-SMTP credentials, and deployed object-storage credentials.
+deployed SMTP credentials, and deployed object-storage credentials.

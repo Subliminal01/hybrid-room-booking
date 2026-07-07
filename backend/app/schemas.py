@@ -146,6 +146,12 @@ class PasswordResetConfirmRequest(BaseModel):
     new_password: str = Field(min_length=8, max_length=128)
 
 
+class AdminEmailTestResponse(BaseModel):
+    message: str
+    provider: str
+    recipient: str
+
+
 class TimeSlot(BaseModel):
     start_at: datetime
     end_at: datetime

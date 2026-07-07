@@ -96,6 +96,20 @@ class EmailService:
         )
         return token if self.expose_tokens_in_response else None
 
+    def send_admin_test_email(self, user: User) -> None:
+        self.send(
+            EmailMessage(
+                to=user.email,
+                subject="Hybrid Rooms email delivery test",
+                body=(
+                    f"Hi {user.full_name},\n\n"
+                    "This confirms transactional email delivery is configured for "
+                    "Hybrid Rooms.\n\n"
+                    f"Provider: {self.settings.email_provider}"
+                ),
+            )
+        )
+
 
 def get_email_service(settings: Settings | None = None) -> EmailService:
     return EmailService(settings)

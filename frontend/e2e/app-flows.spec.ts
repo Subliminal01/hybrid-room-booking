@@ -164,6 +164,14 @@ async function mockApi(page: Page) {
       });
     }
 
+    if (method === "POST" && path === "/admin/email/test") {
+      return fulfillJson(route, {
+        message: "Test email sent",
+        provider: "log",
+        recipient: "admin@example.com",
+      });
+    }
+
     if (method === "PATCH" && path === "/admin/workspaces/review-workspace-1/review") {
       return fulfillJson(route, workspace({ id: "review-workspace-1", review_status: "approved" }));
     }

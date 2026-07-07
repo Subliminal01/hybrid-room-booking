@@ -78,6 +78,10 @@ Similarly, `EMAIL_PROVIDER=log` with `ALLOW_LOG_EMAIL_IN_PRODUCTION=1` is only
 for demo validation. Switch to SMTP before relying on verification or password
 reset emails.
 
+After SMTP credentials are configured, sign in as an admin and use **Send email
+test** in Admin Operations. A successful response means the API could connect to
+the SMTP provider and send to the admin account email.
+
 Workspace photo uploads are stored under `UPLOAD_DIR` and served from
 `/uploads`. This is acceptable for demos, but local instance storage is not
 durable on many free hosts. Before public launch, move uploads to object storage
