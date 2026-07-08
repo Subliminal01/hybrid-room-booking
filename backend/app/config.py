@@ -92,6 +92,7 @@ class Settings:
         self.sentry_release = parse_optional_env("SENTRY_RELEASE")
         self.sentry_traces_sample_rate = parse_float_env("SENTRY_TRACES_SAMPLE_RATE", 0.0)
         self.auth_secret_key = getenv("AUTH_SECRET_KEY", DEV_AUTH_SECRET_KEY)
+        self.admin_bootstrap_secret = parse_optional_env("ADMIN_BOOTSTRAP_SECRET")
         self.access_token_expire_minutes = parse_int_env("ACCESS_TOKEN_EXPIRE_MINUTES", 60)
         self.refresh_token_expire_days = parse_int_env("REFRESH_TOKEN_EXPIRE_DAYS", 30)
         self.booking_hold_minutes = parse_int_env("BOOKING_HOLD_MINUTES", 30)
@@ -182,6 +183,9 @@ class Settings:
 
         if len(self.auth_secret_key) < 32 or self.auth_secret_key in WEAK_SECRET_VALUES:
             raise ConfigError("AUTH_SECRET_KEY must be a strong production secret")
+
+        if self.admin_bootstrap_secret and len(self.admin_bootstrap_secret) < 24:
+            raise ConfigError("ADMIN_BOOTSTRAP_SECRET must be at least 24 characters")
 
         if not self.database_url.startswith("postgresql"):
             raise ConfigError("DATABASE_URL must point to PostgreSQL in production")

@@ -470,6 +470,125 @@ def test_public_registration_rejects_admin_role():
     app.dependency_overrides.clear()
 
 
+def test_admin_bootstrap_disabled_without_secret(monkeypatch):
+    app.dependency_overrides[get_session] = make_session_override()
+    monkeypatch.setattr("app.main.settings.admin_bootstrap_secret", None)
+    client = TestClient(app)
+
+    response = client.post(
+        "/admin/bootstrap",
+        json={
+            "email": "admin@example.com",
+            "password": "strong-admin-password",
+            "full_name": "Platform Admin",
+            "bootstrap_secret": "missing-secret",
+        },
+    )
+
+    assert response.status_code == 404
+
+    app.dependency_overrides.clear()
+
+
+def test_admin_bootstrap_rejects_invalid_secret(monkeypatch):
+    app.dependency_overrides[get_session] = make_session_override()
+    monkeypatch.setattr(
+        "app.main.settings.admin_bootstrap_secret",
+        "valid-bootstrap-secret-value",
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/admin/bootstrap",
+        json={
+            "email": "admin@example.com",
+            "password": "strong-admin-password",
+            "full_name": "Platform Admin",
+            "bootstrap_secret": "wrong-secret",
+        },
+    )
+
+    assert response.status_code == 403
+
+    app.dependency_overrides.clear()
+
+
+def test_admin_bootstrap_creates_admin_user(monkeypatch):
+    app.dependency_overrides[get_session] = make_session_override()
+    monkeypatch.setattr(
+        "app.main.settings.admin_bootstrap_secret",
+        "valid-bootstrap-secret-value",
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/admin/bootstrap",
+        json={
+            "email": "Admin@Example.com",
+            "password": "strong-admin-password",
+            "full_name": "Platform Admin",
+            "bootstrap_secret": "valid-bootstrap-secret-value",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["created"] is True
+    assert body["user"]["email"] == "admin@example.com"
+    assert body["user"]["role"] == "admin"
+
+    login_response = client.post(
+        "/auth/login",
+        json={"email": "admin@example.com", "password": "strong-admin-password"},
+    )
+    assert login_response.status_code == 200
+    assert login_response.json()["user"]["role"] == "admin"
+
+    app.dependency_overrides.clear()
+
+
+def test_admin_bootstrap_promotes_existing_user(monkeypatch):
+    app.dependency_overrides[get_session] = make_session_override()
+    monkeypatch.setattr(
+        "app.main.settings.admin_bootstrap_secret",
+        "valid-bootstrap-secret-value",
+    )
+    client = TestClient(app)
+    client.post(
+        "/auth/register",
+        json={
+            "email": "worker@example.com",
+            "password": "old-password",
+            "full_name": "Hybrid Worker",
+        },
+    )
+
+    response = client.post(
+        "/admin/bootstrap",
+        json={
+            "email": "worker@example.com",
+            "password": "strong-admin-password",
+            "full_name": "Platform Admin",
+            "bootstrap_secret": "valid-bootstrap-secret-value",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["created"] is False
+    assert body["user"]["role"] == "admin"
+    assert body["user"]["full_name"] == "Platform Admin"
+
+    login_response = client.post(
+        "/auth/login",
+        json={"email": "worker@example.com", "password": "strong-admin-password"},
+    )
+    assert login_response.status_code == 200
+    assert login_response.json()["user"]["role"] == "admin"
+
+    app.dependency_overrides.clear()
+
+
 def test_create_admin_script_creates_admin_user(monkeypatch):
     engine = create_engine(
         "sqlite://",

@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import json
 from decimal import Decimal
 
@@ -18,6 +19,7 @@ from app.auth_service import (
     RefreshTokenError,
     authenticate_user,
     confirm_email_verification_token,
+    get_user_by_email,
     issue_user_session,
     register_user,
     request_email_verification_token,
@@ -72,6 +74,8 @@ from app.payment_service import (
 )
 from app.rate_limit import configure_rate_limiting
 from app.schemas import (
+    AdminBootstrapRequest,
+    AdminBootstrapResponse,
     AdminEmailStatusResponse,
     AdminEmailTestResponse,
     AdminPaymentProviderStatusResponse,
@@ -317,6 +321,49 @@ def health_live() -> dict[str, str]:
 def health_ready(session: Session = Depends(get_session)) -> dict[str, str]:
     session.exec(text("SELECT 1")).one()
     return {"status": "ready", "database": "ok"}
+
+
+@app.post("/admin/bootstrap", response_model=AdminBootstrapResponse)
+def bootstrap_admin_user(
+    request: AdminBootstrapRequest,
+    session: Session = Depends(get_session),
+) -> AdminBootstrapResponse:
+    if settings.admin_bootstrap_secret is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Admin bootstrap is not enabled",
+        )
+
+    if not hmac.compare_digest(request.bootstrap_secret, settings.admin_bootstrap_secret):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid admin bootstrap secret",
+        )
+
+    user = get_user_by_email(session, request.email)
+    created = user is None
+    if user is None:
+        user = register_user(
+            session,
+            email=request.email,
+            password=request.password,
+            full_name=request.full_name,
+            role=UserRole.ADMIN,
+        )
+    else:
+        user.role = UserRole.ADMIN
+        user.full_name = request.full_name
+        user.hashed_password = hash_password(request.password)
+        user.is_active = True
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+    return AdminBootstrapResponse(
+        user=UserResponse.model_validate(user),
+        created=created,
+        message="Admin user created" if created else "Admin user updated",
+    )
 
 
 @app.post(

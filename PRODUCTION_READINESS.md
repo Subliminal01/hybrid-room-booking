@@ -13,6 +13,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 - FastAPI backend with SQLModel models, Alembic migrations, and PostgreSQL
   overlap protection for bookings.
 - Worker, host, and admin authentication flows with access/refresh tokens.
+- Secret-protected admin bootstrap endpoint for hosts without shell access.
 - Email verification and password reset service boundaries with SMTP delivery support.
 - Admin-triggered test email endpoint for SMTP delivery verification.
 - Admin email-provider status check with safe SMTP setup diagnostics.
@@ -65,6 +66,8 @@ payment-provider credentials, live domains, and provider webhook validation.
 
 - Provision a PostgreSQL database and run `alembic upgrade head`.
 - Set production backend environment values from `backend/.env.example`.
+- Create the first admin account, then remove `ADMIN_BOOTSTRAP_SECRET` if it was
+  used for bootstrap.
 - Set `NEXT_PUBLIC_API_BASE_URL` for the deployed frontend.
 - Configure Razorpay or Stripe sandbox/live credentials.
 - Configure SMTP transactional-email credentials.

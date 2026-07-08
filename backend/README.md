@@ -71,7 +71,9 @@ The interval uses `[)` semantics: the start is included, the end is excluded. So
 Creates a user and returns a bearer token.
 
 Public registration only accepts `worker` and `host` roles. Admin accounts must
-be created through the controlled backend script:
+be created through a controlled backend path.
+
+For local development or deployed hosts with shell access, run:
 
 ```powershell
 $env:ADMIN_EMAIL="admin@example.com"
@@ -80,8 +82,22 @@ $env:ADMIN_FULL_NAME="Platform Admin"
 python scripts/create_admin.py
 ```
 
-On deployed environments, run the same script from a one-off job/shell with
-`DATABASE_URL` pointing at the production database.
+On deployed environments without shell access, temporarily set
+`ADMIN_BOOTSTRAP_SECRET` to a long random value, redeploy, and call:
+
+```bash
+curl -X POST https://your-api.example.com/admin/bootstrap \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@example.com",
+    "password": "replace-with-a-long-admin-password",
+    "full_name": "Platform Admin",
+    "bootstrap_secret": "the-temporary-bootstrap-secret"
+  }'
+```
+
+After the admin account is created, remove `ADMIN_BOOTSTRAP_SECRET` from the
+deployed environment and redeploy so `POST /admin/bootstrap` is disabled again.
 
 ### `POST /auth/login`
 

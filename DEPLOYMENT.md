@@ -28,6 +28,8 @@ Start from `backend/.env.example` and set production values:
 APP_ENV=production
 DATABASE_URL=postgresql+psycopg://...
 AUTH_SECRET_KEY=<long-random-secret>
+# Optional; set only while creating the first admin without shell access.
+ADMIN_BOOTSTRAP_SECRET=<temporary-long-random-secret>
 CORS_ORIGINS=https://your-frontend.example.com
 FRONTEND_BASE_URL=https://your-frontend.example.com
 PUBLIC_API_BASE_URL=https://your-api.example.com
@@ -69,6 +71,11 @@ STRIPE_WEBHOOK_SECRET=<webhook-secret>
 Production rejects weak auth secrets, non-PostgreSQL databases, insecure CORS
 origins, non-HTTPS frontend URLs, log-only emails, and mock payments unless
 explicitly allowed for a staging/demo environment.
+
+`ADMIN_BOOTSTRAP_SECRET` enables `POST /admin/bootstrap` for creating or
+promoting an admin user when the hosting provider does not provide free shell
+access. Remove this environment variable and redeploy immediately after the
+first admin account is created.
 
 For a free demo deployment, use a free external PostgreSQL provider such as Neon
 or Supabase and set `DATABASE_URL` manually in the backend host. Keep

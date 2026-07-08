@@ -98,6 +98,32 @@ class UserPageResponse(BaseModel):
     offset: int
 
 
+class AdminBootstrapRequest(BaseModel):
+    email: str = Field(max_length=320)
+    password: str = Field(min_length=12, max_length=128)
+    full_name: str = Field(default="Platform Admin", min_length=1, max_length=160)
+    bootstrap_secret: str = Field(min_length=1, max_length=256)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        value = value.strip().lower()
+        if "@" not in value:
+            raise ValueError("email must be valid")
+        return value
+
+    @field_validator("full_name")
+    @classmethod
+    def normalize_full_name(cls, value: str) -> str:
+        return value.strip()
+
+
+class AdminBootstrapResponse(BaseModel):
+    user: UserResponse
+    created: bool
+    message: str
+
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
