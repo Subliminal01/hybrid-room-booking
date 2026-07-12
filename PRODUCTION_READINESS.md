@@ -14,9 +14,10 @@ payment-provider credentials, live domains, and provider webhook validation.
   overlap protection for bookings.
 - Worker, host, and admin authentication flows with access/refresh tokens.
 - Secret-protected admin bootstrap endpoint for hosts without shell access.
-- Email verification and password reset service boundaries with SMTP delivery support.
-- Admin-triggered test email endpoint for SMTP delivery verification.
-- Admin email-provider status check with safe SMTP setup diagnostics.
+- Email verification and password reset service boundaries with SMTP and Brevo
+  HTTPS delivery support.
+- Admin-triggered test email endpoint for email delivery verification.
+- Admin email-provider status check with safe SMTP/Brevo setup diagnostics.
 - Workspace listing, host availability, blackout dates, and admin moderation.
 - Host workspace photo uploads with file type and size validation.
 - Local and S3-compatible durable object storage modes for workspace photo uploads.
@@ -26,7 +27,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 - Admin operations views for marketplace users, bookings, and payments.
 - Admin payment-provider status check with safe Razorpay/Stripe setup diagnostics.
 - Admin upload-storage status check with safe local/S3 setup diagnostics.
-- Log and SMTP email-provider modes.
+- Log, SMTP, and Brevo email-provider modes.
 - Mock, Razorpay, and Stripe payment-provider boundaries.
 - Signed payment webhook handling for success and failure events.
 - Production configuration checks for strong secrets, HTTPS origins, PostgreSQL,
@@ -54,7 +55,7 @@ payment-provider credentials, live domains, and provider webhook validation.
 - Frontend production build: passed.
 - Frontend smoke test: passed against local frontend and backend.
 - Admin operations tests: passed.
-- Admin SMTP test-email endpoint tests: passed.
+- Admin email test endpoint tests: passed.
 - Admin email-provider status tests: passed.
 - Admin payment-provider status tests: passed.
 - Admin upload-storage status tests: passed.
@@ -70,7 +71,7 @@ payment-provider credentials, live domains, and provider webhook validation.
   used for bootstrap.
 - Set `NEXT_PUBLIC_API_BASE_URL` for the deployed frontend.
 - Configure Razorpay or Stripe sandbox/live credentials.
-- Configure SMTP transactional-email credentials.
+- Configure Brevo or SMTP transactional-email credentials.
 - Configure durable object storage credentials with `STORAGE_PROVIDER=s3` before
   relying on hosted workspace photos.
 - Configure `SENTRY_DSN` in Render for backend exception tracing.
@@ -90,4 +91,4 @@ payment-provider credentials, live domains, and provider webhook validation.
 
 The application is about 99% complete for MVP production readiness. The
 remaining work is mostly external setup and validation: real payment credentials,
-deployed SMTP credentials, and deployed object-storage credentials.
+deployed email-provider credentials, and deployed object-storage credentials.

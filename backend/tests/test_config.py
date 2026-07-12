@@ -155,6 +155,26 @@ def test_production_accepts_hardened_settings(monkeypatch):
     clear_settings_cache()
 
 
+def test_production_accepts_brevo_email_provider(monkeypatch):
+    clear_settings_cache()
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://user:pass@db:5432/room_booking")
+    monkeypatch.setenv("AUTH_SECRET_KEY", "a-real-production-secret-with-enough-length")
+    monkeypatch.setenv("CORS_ORIGINS", "https://app.example.com")
+    monkeypatch.setenv("FRONTEND_BASE_URL", "https://app.example.com")
+    monkeypatch.setenv("PAYMENT_PROVIDER", "mock")
+    monkeypatch.setenv("ALLOW_MOCK_PAYMENTS_IN_PRODUCTION", "1")
+    monkeypatch.setenv("EMAIL_PROVIDER", "brevo")
+    monkeypatch.setenv("BREVO_API_KEY", "brevo-api-key")
+
+    settings = get_settings()
+
+    assert settings.email_provider == "brevo"
+    assert settings.brevo_api_key == "brevo-api-key"
+
+    clear_settings_cache()
+
+
 def test_production_rejects_mock_payment_provider(monkeypatch):
     clear_settings_cache()
     monkeypatch.setenv("APP_ENV", "production")
@@ -281,6 +301,23 @@ def test_production_rejects_log_email_provider_without_override(monkeypatch):
 
 
 def test_production_rejects_missing_smtp_credentials(monkeypatch):
+    clear_settings_cache()
+
+
+def test_production_rejects_missing_brevo_api_key(monkeypatch):
+    clear_settings_cache()
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://user:pass@db:5432/room_booking")
+    monkeypatch.setenv("AUTH_SECRET_KEY", "a-real-production-secret-with-enough-length")
+    monkeypatch.setenv("CORS_ORIGINS", "https://app.example.com")
+    monkeypatch.setenv("FRONTEND_BASE_URL", "https://app.example.com")
+    monkeypatch.setenv("PAYMENT_PROVIDER", "mock")
+    monkeypatch.setenv("ALLOW_MOCK_PAYMENTS_IN_PRODUCTION", "1")
+    monkeypatch.setenv("EMAIL_PROVIDER", "brevo")
+
+    with pytest.raises(ConfigError, match="BREVO_API_KEY"):
+        get_settings()
+
     clear_settings_cache()
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://user:pass@db:5432/room_booking")

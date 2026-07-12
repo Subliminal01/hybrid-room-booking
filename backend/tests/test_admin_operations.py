@@ -4,7 +4,7 @@ from starlette.testclient import TestClient
 
 from app.auth_service import issue_user_session, register_user as register_user_service
 from app.database import get_session
-from app.email_service import EmailService
+from app.email_service import EmailDeliveryError, EmailService
 from app.main import app
 from app.models import UserRole
 
@@ -200,6 +200,25 @@ def test_non_admin_cannot_send_email_delivery_test():
     app.dependency_overrides.clear()
 
 
+def test_admin_email_delivery_test_reports_smtp_errors(monkeypatch):
+    client, admin, *_ = setup_admin_fixture()
+
+    def fake_send_admin_test_email(self, user):
+        raise EmailDeliveryError("SMTP connection failed: network unreachable")
+
+    monkeypatch.setattr(EmailService, "send_admin_test_email", fake_send_admin_test_email)
+
+    response = client.post(
+        "/admin/email/test",
+        headers={"Authorization": f"Bearer {admin['access_token']}"},
+    )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "SMTP connection failed: network unreachable"
+
+    app.dependency_overrides.clear()
+
+
 def test_admin_can_read_log_email_status():
     client, admin, *_ = setup_admin_fixture()
 
@@ -257,6 +276,49 @@ def test_admin_email_status_reports_missing_smtp_settings(monkeypatch):
         "SMTP_PASSWORD",
     ]
     assert body["test_supported"] is True
+
+    app.dependency_overrides.clear()
+
+
+def test_admin_email_status_reports_brevo_settings(monkeypatch):
+    client, admin, *_ = setup_admin_fixture()
+    monkeypatch.setattr("app.main.settings.email_provider", "brevo")
+    monkeypatch.setattr("app.main.settings.email_from", "support@example.com")
+    monkeypatch.setattr("app.main.settings.brevo_api_key", "brevo-key")
+
+    response = client.get(
+        "/admin/email/status",
+        headers={"Authorization": f"Bearer {admin['access_token']}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "brevo"
+    assert body["ready"] is True
+    assert body["from_address"] == "support@example.com"
+    assert body["required_settings"] == ["BREVO_API_KEY"]
+    assert body["missing_settings"] == []
+    assert body["test_supported"] is True
+
+    app.dependency_overrides.clear()
+
+
+def test_admin_email_status_reports_missing_brevo_settings(monkeypatch):
+    client, admin, *_ = setup_admin_fixture()
+    monkeypatch.setattr("app.main.settings.email_provider", "brevo")
+    monkeypatch.setattr("app.main.settings.brevo_api_key", None)
+
+    response = client.get(
+        "/admin/email/status",
+        headers={"Authorization": f"Bearer {admin['access_token']}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "brevo"
+    assert body["ready"] is False
+    assert body["required_settings"] == ["BREVO_API_KEY"]
+    assert body["missing_settings"] == ["BREVO_API_KEY"]
 
     app.dependency_overrides.clear()
 

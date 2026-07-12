@@ -252,6 +252,17 @@ AUTH_SECRET_KEY=<long-random-secret>
 CORS_ORIGINS=https://your-frontend.example.com
 FRONTEND_BASE_URL=https://your-frontend.example.com
 EMAIL_FROM=support@your-domain.example
+EMAIL_PROVIDER=brevo
+BREVO_API_KEY=<brevo-api-key>
+PAYMENT_PROVIDER=razorpay
+RAZORPAY_KEY_ID=<razorpay-key-id>
+RAZORPAY_KEY_SECRET=<razorpay-key-secret>
+RAZORPAY_WEBHOOK_SECRET=<razorpay-webhook-secret>
+```
+
+For SMTP instead of Brevo, set:
+
+```bash
 EMAIL_PROVIDER=smtp
 SMTP_HOST=<smtp-host>
 SMTP_PORT=587
@@ -259,10 +270,6 @@ SMTP_USERNAME=<smtp-username>
 SMTP_PASSWORD=<smtp-password>
 SMTP_USE_TLS=1
 SMTP_USE_SSL=0
-PAYMENT_PROVIDER=razorpay
-RAZORPAY_KEY_ID=<razorpay-key-id>
-RAZORPAY_KEY_SECRET=<razorpay-key-secret>
-RAZORPAY_WEBHOOK_SECRET=<razorpay-webhook-secret>
 ```
 
 When `APP_ENV=production`, the API refuses to start if the auth secret is weak,
@@ -270,12 +277,12 @@ the database is not PostgreSQL, CORS contains `*`, or any CORS origin is not
 HTTPS. `FRONTEND_BASE_URL` must also use HTTPS because email links are built
 from it.
 
-`EMAIL_PROVIDER` can be `log` or `smtp`. Production rejects `log` unless
+`EMAIL_PROVIDER` can be `log`, `smtp`, or `brevo`. Production rejects `log` unless
 `ALLOW_LOG_EMAIL_IN_PRODUCTION=1` is explicitly set for a demo deployment.
-Use `smtp` with provider credentials before public launch so email verification
-and password reset links reach users. Most transactional email providers expose
-SMTP credentials; use port `587` with `SMTP_USE_TLS=1`, or port `465` with
-`SMTP_USE_SSL=1`.
+Use `brevo` or `smtp` with provider credentials before public launch so email
+verification and password reset links reach users. Brevo sends over HTTPS,
+which avoids hosted-platform SMTP port restrictions. SMTP providers usually use
+port `587` with `SMTP_USE_TLS=1`, or port `465` with `SMTP_USE_SSL=1`.
 
 `PAYMENT_PROVIDER` can be `mock`, `razorpay`, or `stripe`. Production rejects
 `mock` unless `ALLOW_MOCK_PAYMENTS_IN_PRODUCTION=1` is explicitly set for a

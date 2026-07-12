@@ -16,6 +16,7 @@ def make_settings(**overrides):
         "smtp_password": None,
         "smtp_use_tls": True,
         "smtp_use_ssl": False,
+        "brevo_api_key": None,
     }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
@@ -101,6 +102,61 @@ def test_smtp_ssl_skips_starttls(monkeypatch):
     smtp = FakeSmtp.instances[0]
     assert smtp.port == 465
     assert smtp.started_tls is False
+
+
+def test_brevo_email_provider_sends_message(monkeypatch):
+    calls = []
+
+    class FakeResponse:
+        text = '{"messageId":"abc"}'
+
+        def raise_for_status(self):
+            return None
+
+    def fake_post(url, *, json, headers, timeout):
+        calls.append(
+            {
+                "url": url,
+                "json": json,
+                "headers": headers,
+                "timeout": timeout,
+            }
+        )
+        return FakeResponse()
+
+    monkeypatch.setattr("app.email_service.httpx.post", fake_post)
+    service = EmailService(
+        make_settings(
+            email_provider="brevo",
+            brevo_api_key="brevo-key",
+        )
+    )
+
+    service.send(
+        EmailMessage(
+            to="worker@example.com",
+            subject="Verify your email",
+            body="Use this link to verify your email.",
+        )
+    )
+
+    assert calls == [
+        {
+            "url": "https://api.brevo.com/v3/smtp/email",
+            "json": {
+                "sender": {"email": "support@example.com"},
+                "to": [{"email": "worker@example.com"}],
+                "subject": "Verify your email",
+                "textContent": "Use this link to verify your email.",
+            },
+            "headers": {
+                "accept": "application/json",
+                "api-key": "brevo-key",
+                "content-type": "application/json",
+            },
+            "timeout": 10,
+        }
+    ]
 
 
 def test_production_email_methods_do_not_expose_tokens():

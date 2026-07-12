@@ -40,7 +40,7 @@ from app.booking_service import (
 from app.config import get_settings
 from app.database import get_session
 from app.dependencies import get_current_user, require_admin_user, require_host_user
-from app.email_service import get_email_service
+from app.email_service import EmailDeliveryError, get_email_service
 from app.models import (
     AuditAction,
     AuditEvent,
@@ -605,7 +605,13 @@ def list_workspaces_for_review(
 def send_admin_email_test(
     current_user: User = Depends(require_admin_user),
 ) -> AdminEmailTestResponse:
-    get_email_service(settings).send_admin_test_email(current_user)
+    try:
+        get_email_service(settings).send_admin_test_email(current_user)
+    except EmailDeliveryError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
     return AdminEmailTestResponse(
         message="Test email sent",
         provider=settings.email_provider,
@@ -619,6 +625,9 @@ def read_admin_email_status(
 ) -> AdminEmailStatusResponse:
     provider_settings = {
         "log": [],
+        "brevo": [
+            ("BREVO_API_KEY", settings.brevo_api_key),
+        ],
         "smtp": [
             ("SMTP_HOST", settings.smtp_host),
             ("SMTP_USERNAME", settings.smtp_username),

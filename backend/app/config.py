@@ -7,7 +7,7 @@ DEV_DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/room_b
 DEV_CORS_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000"
 PRODUCTION_ENV_NAMES = {"prod", "production"}
 SUPPORTED_PAYMENT_PROVIDERS = {"mock", "razorpay", "stripe"}
-SUPPORTED_EMAIL_PROVIDERS = {"log", "smtp"}
+SUPPORTED_EMAIL_PROVIDERS = {"brevo", "log", "smtp"}
 SUPPORTED_STORAGE_PROVIDERS = {"local", "s3"}
 WEAK_SECRET_VALUES = {
     "",
@@ -117,6 +117,7 @@ class Settings:
         self.smtp_password = parse_optional_env("SMTP_PASSWORD")
         self.smtp_use_tls = parse_bool_env("SMTP_USE_TLS", True)
         self.smtp_use_ssl = parse_bool_env("SMTP_USE_SSL", False)
+        self.brevo_api_key = parse_optional_env("BREVO_API_KEY")
         self.allow_log_email_in_production = parse_bool_env("ALLOW_LOG_EMAIL_IN_PRODUCTION")
         self.payment_provider = getenv("PAYMENT_PROVIDER", "mock").strip().lower()
         self.razorpay_key_id = parse_optional_env("RAZORPAY_KEY_ID")
@@ -217,6 +218,9 @@ class Settings:
             ]
             if missing:
                 raise ConfigError(f"Missing SMTP email settings: {', '.join(missing)}")
+
+        if self.email_provider == "brevo" and not self.brevo_api_key:
+            raise ConfigError("Missing Brevo email settings: BREVO_API_KEY")
 
         if self.payment_provider == "mock" and not self.allow_mock_payments_in_production:
             raise ConfigError("PAYMENT_PROVIDER cannot be mock in production")

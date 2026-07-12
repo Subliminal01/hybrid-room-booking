@@ -3,11 +3,14 @@ import smtplib
 from dataclasses import dataclass
 from email.message import EmailMessage as SmtpEmailMessage
 
+import httpx
+
 from app.config import Settings, get_settings
 from app.models import User
 
 
 logger = logging.getLogger("app.email")
+BREVO_EMAIL_URL = "https://api.brevo.com/v3/smtp/email"
 
 
 @dataclass(frozen=True)
@@ -15,6 +18,10 @@ class EmailMessage:
     to: str
     subject: str
     body: str
+
+
+class EmailDeliveryError(RuntimeError):
+    pass
 
 
 class EmailService:
@@ -26,6 +33,10 @@ class EmailService:
         return not self.settings.is_production
 
     def send(self, message: EmailMessage) -> None:
+        if self.settings.email_provider == "brevo":
+            self._send_brevo(message)
+            return
+
         if self.settings.email_provider == "smtp":
             self._send_smtp(message)
             return
@@ -50,12 +61,53 @@ class EmailService:
             raise RuntimeError("SMTP_HOST is required when EMAIL_PROVIDER=smtp")
 
         smtp_class = smtplib.SMTP_SSL if self.settings.smtp_use_ssl else smtplib.SMTP
-        with smtp_class(smtp_host, self.settings.smtp_port, timeout=10) as smtp:
-            if self.settings.smtp_use_tls and not self.settings.smtp_use_ssl:
-                smtp.starttls()
-            if self.settings.smtp_username and self.settings.smtp_password:
-                smtp.login(self.settings.smtp_username, self.settings.smtp_password)
-            smtp.send_message(smtp_message)
+        try:
+            with smtp_class(smtp_host, self.settings.smtp_port, timeout=10) as smtp:
+                if self.settings.smtp_use_tls and not self.settings.smtp_use_ssl:
+                    smtp.starttls()
+                if self.settings.smtp_username and self.settings.smtp_password:
+                    smtp.login(self.settings.smtp_username, self.settings.smtp_password)
+                smtp.send_message(smtp_message)
+        except OSError as exc:
+            raise EmailDeliveryError(f"SMTP connection failed: {exc}") from exc
+        except smtplib.SMTPException as exc:
+            raise EmailDeliveryError(f"SMTP delivery failed: {exc}") from exc
+
+        logger.info(
+            "email_sent",
+            extra={
+                "to": message.to,
+                "subject": message.subject,
+                "provider": self.settings.email_provider,
+            },
+        )
+
+    def _send_brevo(self, message: EmailMessage) -> None:
+        if not self.settings.brevo_api_key:
+            raise EmailDeliveryError("BREVO_API_KEY is required when EMAIL_PROVIDER=brevo")
+
+        payload = {
+            "sender": {"email": self.settings.email_from},
+            "to": [{"email": message.to}],
+            "subject": message.subject,
+            "textContent": message.body,
+        }
+        headers = {
+            "accept": "application/json",
+            "api-key": self.settings.brevo_api_key,
+            "content-type": "application/json",
+        }
+
+        try:
+            response = httpx.post(BREVO_EMAIL_URL, json=payload, headers=headers, timeout=10)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            detail = exc.response.text[:240]
+            raise EmailDeliveryError(
+                f"Brevo email delivery failed with status {exc.response.status_code}: {detail}"
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise EmailDeliveryError(f"Brevo email delivery failed: {exc}") from exc
 
         logger.info(
             "email_sent",
