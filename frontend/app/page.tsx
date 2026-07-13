@@ -645,6 +645,34 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("verification_token")?.trim();
+    if (!token || !session) {
+      return;
+    }
+
+    let cancelled = false;
+    void runAction(async () => {
+      const updatedUser = await confirmEmailVerification(token);
+      if (cancelled) {
+        return;
+      }
+      const nextSession = { ...session, user: updatedUser };
+      persistSession(nextSession);
+      setVerificationToken("");
+      setMessage("Email verified.");
+      params.delete("verification_token");
+      const nextQuery = params.toString();
+      const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${window.location.hash}`;
+      window.history.replaceState(null, "", nextUrl);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
+
+  useEffect(() => {
     const cursor = pendingDateCursor.current;
     if (!cursor) {
       return;

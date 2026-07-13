@@ -103,6 +103,13 @@ async function mockApi(page: Page) {
       return route.fulfill({ status: 204 });
     }
 
+    if (method === "POST" && path === "/auth/email-verification/confirm") {
+      return fulfillJson(route, {
+        ...userFor("worker"),
+        email_verified_at: "2026-07-12T10:00:00Z",
+      });
+    }
+
     if (method === "GET" && path === "/workspaces/mine") {
       return fulfillJson(route, [workspace({ review_status: "pending" })]);
     }
@@ -250,6 +257,20 @@ test("worker can search a rota and see matching workspaces", async ({ page }) =>
 
   await expect(page.getByText("Koramangala focus room")).toBeVisible();
   await expect(page.getByText("for 2 days")).toBeVisible();
+});
+
+test("worker email verification link updates saved session", async ({ page }) => {
+  const session = sessionFor("worker");
+  await page.goto("/");
+  await page.evaluate((storedSession) => {
+    window.localStorage.setItem("hybrid-room-booking-session", JSON.stringify(storedSession));
+  }, session);
+
+  await page.goto("/?verification_token=verify-token");
+
+  await expect(page.getByText("Email verified.")).toBeVisible();
+  await expect(page.locator(".security-row").getByText("verified")).toBeVisible();
+  await expect(page).not.toHaveURL(/verification_token/);
 });
 
 test("host sees host dashboard and listing manager only", async ({ page }) => {
