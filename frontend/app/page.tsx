@@ -567,6 +567,7 @@ export default function Home() {
   const [bookingNotes, setBookingNotes] = useState("");
   const [slots, setSlots] = useState<SlotDraft[]>(() => makeInitialSlots());
   const [results, setResults] = useState<Workspace[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
   const [myBookings, setMyBookings] = useState<Booking[]>([]);
   const [myBookingsTotal, setMyBookingsTotal] = useState(0);
   const [hostBookings, setHostBookings] = useState<Booking[]>([]);
@@ -595,6 +596,7 @@ export default function Home() {
   const [selectedReceipt, setSelectedReceipt] = useState<BookingGroupReceipt | null>(null);
   const [selectedBookingGroup, setSelectedBookingGroup] = useState<BookingGroupSummary | null>(null);
   const [busy, setBusy] = useState(false);
+  const [busyLabel, setBusyLabel] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pendingDateCursor = useRef<{ index: number; position: number } | null>(null);
@@ -667,7 +669,7 @@ export default function Home() {
       const nextQuery = params.toString();
       const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${window.location.hash}`;
       window.history.replaceState(null, "", nextUrl);
-    });
+    }, "Verifying email");
 
     return () => {
       cancelled = true;
@@ -736,8 +738,9 @@ export default function Home() {
     });
   }, [hostWorkspaces]);
 
-  async function runAction(action: () => Promise<void>) {
+  async function runAction(action: () => Promise<void>, label = "Working") {
     setBusy(true);
+    setBusyLabel(label);
     setError(null);
     setMessage(null);
     try {
@@ -746,6 +749,7 @@ export default function Home() {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setBusy(false);
+      setBusyLabel(null);
     }
   }
 
@@ -857,6 +861,7 @@ export default function Home() {
     setStorageStatus(null);
     setListingDrafts({});
     setResults([]);
+    setHasSearched(false);
     setActiveTab("worker");
   }
 
@@ -939,7 +944,7 @@ export default function Home() {
         setPaymentProviderStatus(providerStatus);
         setStorageStatus(nextStorageStatus);
       }
-    });
+    }, authMode === "login" ? "Signing in" : "Creating account");
   }
 
   async function handleProfileUpdate(event: FormEvent<HTMLFormElement>) {
@@ -959,7 +964,7 @@ export default function Home() {
       const nextSession = { ...session, user: updatedUser };
       persistSession(nextSession);
       setMessage("Profile updated.");
-    });
+    }, "Saving profile");
   }
 
   async function handlePasswordChange(event: FormEvent<HTMLFormElement>) {
@@ -979,7 +984,7 @@ export default function Home() {
       setCurrentPassword("");
       setNewPassword("");
       setMessage("Password updated.");
-    });
+    }, "Updating password");
   }
 
   async function handleRequestEmailVerification() {
@@ -994,7 +999,7 @@ export default function Home() {
           ? "Verification token issued."
           : "Verification instructions sent if email delivery is configured.",
       );
-    });
+    }, "Sending verification email");
   }
 
   async function handleConfirmEmailVerification(event: FormEvent<HTMLFormElement>) {
@@ -1012,7 +1017,7 @@ export default function Home() {
       persistSession(nextSession);
       setVerificationToken("");
       setMessage("Email verified.");
-    });
+    }, "Verifying email");
   }
 
   async function handleRequestPasswordReset(event: FormEvent<HTMLFormElement>) {
@@ -1029,7 +1034,7 @@ export default function Home() {
           ? "Password reset token issued if the email exists."
           : "Password reset instructions sent if the email exists.",
       );
-    });
+    }, "Sending password reset email");
   }
 
   async function handleConfirmPasswordReset(event: FormEvent<HTMLFormElement>) {
@@ -1048,7 +1053,7 @@ export default function Home() {
       setResetNewPassword("");
       setAuthMode("login");
       setMessage("Password reset. You can log in with the new password.");
-    });
+    }, "Resetting password");
   }
 
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
@@ -1066,8 +1071,9 @@ export default function Home() {
         slots: apiSlots,
       });
       setResults(response);
+      setHasSearched(true);
       setMessage(`Found ${response.length} available workspace${response.length === 1 ? "" : "s"}.`);
-    });
+    }, "Searching rooms");
   }
 
   async function handleBook(workspace: Workspace) {
@@ -1100,7 +1106,7 @@ export default function Home() {
       setMessage("Booking reserved. Complete payment from your booking history.");
       await refreshBookings(session.access_token);
       setResults((current) => current.filter((item) => item.id !== workspace.id));
-    });
+    }, "Reserving booking");
   }
 
   async function handlePayBooking(booking: Booking) {
@@ -1170,7 +1176,7 @@ export default function Home() {
           checkout.bookings.length === 1 ? "" : "s"
         } via ${checkoutSession.provider} checkout ${checkoutSession.checkout_reference.slice(0, 17)}.`,
       );
-    });
+    }, "Starting payment");
   }
 
   async function refreshBookings(token = session?.access_token) {
@@ -1202,7 +1208,7 @@ export default function Home() {
       });
       setMyBookings((current) => [...current, ...page.items]);
       setMyBookingsTotal(page.total);
-    });
+    }, "Loading more bookings");
   }
 
   async function loadMoreHostBookings() {
@@ -1217,7 +1223,7 @@ export default function Home() {
       setHostBookings((current) => [...current, ...page.items]);
       setHostBookingsTotal(page.total);
       setHostRevenue(await getHostRevenueSummary(session.access_token));
-    });
+    }, "Loading host bookings");
   }
 
   async function refreshHostWorkspaces(token = session?.access_token) {
@@ -1289,7 +1295,7 @@ export default function Home() {
       });
       setAdminUsers((current) => [...current, ...page.items]);
       setAdminUsersTotal(page.total);
-    });
+    }, "Loading bookings");
   }
 
   async function loadMoreAdminBookings() {
@@ -1303,7 +1309,7 @@ export default function Home() {
       });
       setAdminBookings((current) => [...current, ...page.items]);
       setAdminBookingsTotal(page.total);
-    });
+    }, "Loading payments");
   }
 
   async function loadMoreAdminPayments() {
@@ -1317,7 +1323,7 @@ export default function Home() {
       });
       setAdminPayments((current) => [...current, ...page.items]);
       setAdminPaymentsTotal(page.total);
-    });
+    }, "Loading audit events");
   }
 
   async function loadMoreAuditEvents() {
@@ -1331,7 +1337,7 @@ export default function Home() {
       });
       setAuditEvents((current) => [...current, ...page.items]);
       setAuditEventsTotal(page.total);
-    });
+    }, "Loading audit events");
   }
 
   async function handleReviewWorkspace(workspace: Workspace, reviewStatus: "approved" | "rejected") {
@@ -1349,7 +1355,7 @@ export default function Home() {
       });
       await refreshAuditEvents(session.access_token);
       setMessage(`${reviewed.title} marked ${reviewed.review_status}.`);
-    });
+    }, reviewStatus === "approved" ? "Approving listing" : "Rejecting listing");
   }
 
   async function handleCancel(booking: Booking) {
@@ -1367,7 +1373,7 @@ export default function Home() {
       const receipt = await getBookingGroupReceipt(session.access_token, group.booking_group_id);
       setSelectedReceipt(receipt);
       setMessage("Receipt loaded.");
-    });
+    }, "Loading receipt");
   }
 
   async function confirmCancel(booking: Booking) {
@@ -1388,7 +1394,7 @@ export default function Home() {
             : ""
         }.`,
       );
-    });
+    }, "Cancelling booking");
   }
 
   async function handleCreateWorkspace(event: FormEvent<HTMLFormElement>) {
@@ -1451,7 +1457,7 @@ export default function Home() {
       }));
       setWorkspaceForm(initialWorkspaceForm);
       setMessage(`${workspaceWithPhoto.title} was submitted for admin review.`);
-    });
+    }, "Submitting listing");
   }
 
   function toggleWorkspaceFormAmenity(amenity: string) {
@@ -1503,7 +1509,7 @@ export default function Home() {
         [workspace.id]: listingDraftFromWorkspace(merged),
       }));
       setMessage(`${workspace.title} photo updated.`);
-    });
+    }, "Uploading photo");
   }
 
   function toggleWorkspaceFormDay(day: number) {
@@ -1580,7 +1586,7 @@ export default function Home() {
         [workspace.id]: listingDraftFromWorkspace(merged),
       }));
       setMessage(`${updated.title} details updated.`);
-    });
+    }, "Saving listing details");
   }
 
   async function handleWorkspaceStatus(workspace: Workspace, statusValue: WorkspaceStatus) {
@@ -1595,7 +1601,7 @@ export default function Home() {
         current.map((item) => (item.id === updated.id ? updated : item)),
       );
       setMessage(`${updated.title} is now ${updated.status}.`);
-    });
+    }, statusValue === "active" ? "Activating listing" : "Pausing listing");
   }
 
   function updateSlot(index: number, patch: Partial<SlotDraft>) {
@@ -2276,7 +2282,7 @@ export default function Home() {
                 </button>
                 <button className="btn" type="submit" disabled={busy}>
                   <Search size={16} />
-                  Search
+                  {busy && busyLabel === "Searching rooms" ? "Searching" : "Search"}
                 </button>
               </div>
             </form>
@@ -2285,8 +2291,22 @@ export default function Home() {
         </aside>
 
         <section className="stack">
-          {message ? <div className="notice">{message}</div> : null}
-          {error ? <div className="error">{error}</div> : null}
+          {busy ? (
+            <div className="progress-banner" role="status" aria-live="polite">
+              <span className="spinner" aria-hidden="true" />
+              {busyLabel}...
+            </div>
+          ) : null}
+          {message ? (
+            <div className="notice" role="status" aria-live="polite">
+              {message}
+            </div>
+          ) : null}
+          {error ? (
+            <div className="error" role="alert">
+              {error}
+            </div>
+          ) : null}
 
           {activeTab === "admin" && isAdmin ? (
             <>
@@ -2303,11 +2323,11 @@ export default function Home() {
                     <button
                       className="btn secondary"
                       type="button"
-                      onClick={() => runAction(() => refreshReviewWorkspaces())}
+                      onClick={() => runAction(() => refreshReviewWorkspaces(), "Refreshing review queue")}
                       disabled={busy}
                     >
                       <History size={16} />
-                      Refresh queue
+                      {busy && busyLabel === "Refreshing review queue" ? "Refreshing" : "Refresh queue"}
                     </button>
                   </div>
                   <div className="workspace-list">
@@ -2390,11 +2410,11 @@ export default function Home() {
                     <button
                       className="btn secondary"
                       type="button"
-                      onClick={() => runAction(() => refreshAdminOperations())}
+                      onClick={() => runAction(() => refreshAdminOperations(), "Refreshing operations")}
                       disabled={busy}
                     >
                       <History size={16} />
-                      Refresh operations
+                      {busy && busyLabel === "Refreshing operations" ? "Refreshing" : "Refresh operations"}
                     </button>
                     <button
                       className="btn secondary"
@@ -2408,12 +2428,12 @@ export default function Home() {
                           setMessage(
                             `Test email sent to ${response.recipient} via ${response.provider}.`,
                           );
-                        })
+                        }, "Sending email test")
                       }
                       disabled={busy}
                     >
                       <MailCheck size={16} />
-                      Send email test
+                      {busy && busyLabel === "Sending email test" ? "Sending" : "Send email test"}
                     </button>
                   </div>
 
@@ -2640,11 +2660,11 @@ export default function Home() {
                     <button
                       className="btn secondary"
                       type="button"
-                      onClick={() => runAction(() => refreshAuditEvents())}
+                      onClick={() => runAction(() => refreshAuditEvents(), "Refreshing audit log")}
                       disabled={busy}
                     >
                       <History size={16} />
-                      Refresh audit
+                      {busy && busyLabel === "Refreshing audit log" ? "Refreshing" : "Refresh audit"}
                     </button>
                   </div>
                   <div className="audit-list">
@@ -2888,11 +2908,11 @@ export default function Home() {
                     <button
                       className="btn secondary"
                       type="button"
-                      onClick={() => runAction(() => refreshHostWorkspaces())}
+                      onClick={() => runAction(() => refreshHostWorkspaces(), "Refreshing listings")}
                       disabled={busy}
                     >
                       <History size={16} />
-                      Refresh listings
+                      {busy && busyLabel === "Refreshing listings" ? "Refreshing" : "Refresh listings"}
                     </button>
                   </div>
                 </form>
@@ -3201,7 +3221,14 @@ export default function Home() {
             </div>
             <div className="panel-body">
               {results.length === 0 ? (
-                <div className="muted">Search for a rota to see available workspaces.</div>
+                <div className="empty-state">
+                  <strong>{hasSearched ? "No rooms match this rota yet." : "Search for rooms that fit your rota."}</strong>
+                  <p>
+                    {hasSearched
+                      ? "Try a wider price range, fewer rota days, or another nearby city."
+                      : "Choose your work dates, city, and budget to see available daily stays."}
+                  </p>
+                </div>
               ) : (
                 <div className="results-grid">
                   {results.map((workspace) => (
@@ -3283,21 +3310,21 @@ export default function Home() {
                 <button
                   className="btn secondary"
                   type="button"
-                  onClick={() => runAction(() => refreshBookings())}
+                  onClick={() => runAction(() => refreshBookings(), "Refreshing bookings")}
                   disabled={!session || busy}
                 >
                   <History size={16} />
-                  Refresh
+                  {busy && busyLabel === "Refreshing bookings" ? "Refreshing" : "Refresh"}
                 </button>
                 {activeTab === "host" ? (
                   <button
                     className="btn secondary"
                     type="button"
-                    onClick={() => runAction(() => refreshHostWorkspaces())}
+                    onClick={() => runAction(() => refreshHostWorkspaces(), "Refreshing listings")}
                     disabled={busy}
                   >
                     <Building2 size={16} />
-                    Refresh listings
+                    {busy && busyLabel === "Refreshing listings" ? "Refreshing" : "Refresh listings"}
                   </button>
                 ) : null}
               </div>
