@@ -535,13 +535,74 @@ a:hover {
 
 .receipt-panel {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr;
   gap: 14px;
-  align-items: center;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
   padding: 14px;
+}
+
+.receipt-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.receipt-parties {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.receipt-parties > div {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  padding: 10px;
+}
+
+.receipt-parties span,
+.receipt-line span,
+.receipt-payment span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.receipt-parties p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.receipt-lines,
+.receipt-payments {
+  display: grid;
+  gap: 8px;
+}
+
+.receipt-line,
+.receipt-payment {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+
+.receipt-line > div {
+  display: grid;
+  gap: 3px;
+}
+
+.receipt-payment {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+
+.receipt-payment span {
+  overflow-wrap: anywhere;
 }
 
 .booking-detail-panel {
@@ -589,6 +650,8 @@ a:hover {
   display: grid;
   gap: 4px;
   justify-items: end;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
 }
 
 .audit-list {
@@ -927,6 +990,10 @@ a:hover {
     grid-template-columns: 1fr;
   }
 
+  .receipt-parties {
+    grid-template-columns: 1fr;
+  }
+
   .revenue-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -944,8 +1011,17 @@ a:hover {
   .inline-form,
   .audit-row,
   .booking-row,
+  .receipt-heading,
+  .receipt-line,
+  .receipt-payment,
   .workspace-row {
     grid-template-columns: 1fr;
+  }
+
+  .receipt-heading .btn,
+  .receipt-totals {
+    justify-self: stretch;
+    justify-items: stretch;
   }
 
   .session {
@@ -955,5 +1031,34 @@ a:hover {
 
   .revenue-summary {
     grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .topbar,
+  .content > .stack > .panel:not(:has(.receipt-panel)),
+  .receipt-panel .btn,
+  footer {
+    display: none !important;
+  }
+
+  .app-shell,
+  .content,
+  .panel,
+  .panel-body {
+    display: block;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    border: 0;
+  }
+
+  .receipt-panel {
+    border: 0;
   }
 }

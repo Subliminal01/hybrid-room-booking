@@ -3451,19 +3451,74 @@ export default function Home() {
               ) : null}
               {selectedReceipt ? (
                 <div className="receipt-panel" aria-label="Booking receipt">
-                  <div>
-                    <strong>Receipt</strong>
-                    <div className="muted">
-                      {selectedReceipt.bookings[0]?.workspace?.title ?? "Workspace booking"} ·{" "}
-                      {selectedReceipt.bookings.length} day
-                      {selectedReceipt.bookings.length === 1 ? "" : "s"}
+                  <div className="receipt-heading">
+                    <div>
+                      <strong>Receipt {selectedReceipt.receipt_number}</strong>
+                      <div className="muted">
+                        {selectedReceipt.workspace_title} · {selectedReceipt.bookings.length} day
+                        {selectedReceipt.bookings.length === 1 ? "" : "s"}
+                      </div>
+                      <div className="muted">
+                        Issued {formatDateTime(selectedReceipt.issued_at)}
+                        {selectedReceipt.paid_at ? ` · Paid ${formatDateTime(selectedReceipt.paid_at)}` : ""}
+                      </div>
                     </div>
-                    <div className="muted">
-                      Issued {formatDateTime(selectedReceipt.issued_at)}
-                      {selectedReceipt.paid_at ? ` · Paid ${formatDateTime(selectedReceipt.paid_at)}` : ""}
+                    <button
+                      className="btn secondary"
+                      type="button"
+                      onClick={() => window.print()}
+                      disabled={busy}
+                    >
+                      Print receipt
+                    </button>
+                  </div>
+                  <div className="receipt-parties">
+                    <div>
+                      <span>From</span>
+                      <strong>{selectedReceipt.supplier.name}</strong>
+                      <p>{selectedReceipt.supplier.email}</p>
+                      <p>{selectedReceipt.supplier.address}</p>
+                    </div>
+                    <div>
+                      <span>Bill to</span>
+                      <strong>{selectedReceipt.customer.name}</strong>
+                      <p>{selectedReceipt.customer.email}</p>
+                    </div>
+                    <div>
+                      <span>Host</span>
+                      <strong>{selectedReceipt.host.name}</strong>
+                      <p>{selectedReceipt.host.email}</p>
+                      <p>{selectedReceipt.workspace_address}</p>
                     </div>
                   </div>
+                  <div className="receipt-lines" aria-label="Receipt line items">
+                    {selectedReceipt.line_items.map((item) => (
+                      <div className="receipt-line" key={item.booking_id}>
+                        <div>
+                          <strong>{item.description}</strong>
+                          <span>
+                            {formatDate(item.service_date)} · {formatDateTime(item.start_at)} to{" "}
+                            {formatDateTime(item.end_at)}
+                          </span>
+                        </div>
+                        <span>{formatMoney(item.amount, selectedReceipt.currency)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="receipt-payments" aria-label="Receipt payments">
+                    {selectedReceipt.payment_summary.map((payment) => (
+                      <div className="receipt-payment" key={payment.payment_id}>
+                        <span>
+                          {payment.provider} · {payment.status}
+                        </span>
+                        <span>{payment.provider_reference}</span>
+                        <strong>{formatMoney(payment.amount, selectedReceipt.currency)}</strong>
+                      </div>
+                    ))}
+                  </div>
                   <div className="receipt-totals">
+                    <span>Subtotal {formatMoney(selectedReceipt.subtotal, selectedReceipt.currency)}</span>
+                    <span>Tax {formatMoney(selectedReceipt.tax_total, selectedReceipt.currency)}</span>
                     <span>Paid {formatMoney(selectedReceipt.total_paid, selectedReceipt.currency)}</span>
                     {Number(selectedReceipt.total_refunded) > 0 ? (
                       <span>Refunded {formatMoney(selectedReceipt.total_refunded, selectedReceipt.currency)}</span>

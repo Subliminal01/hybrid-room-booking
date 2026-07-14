@@ -1393,10 +1393,77 @@ def get_booking_group_receipt(
         for payment in settled_payments
         if payment.paid_at is not None
     ]
+    first_booking = bookings[0]
+    workspace = first_booking.workspace
+    host = workspace.owner if workspace is not None else None
+    customer = first_booking.user
+    workspace_title = workspace.title if workspace is not None else "Workspace booking"
+    workspace_address = (
+        ", ".join(
+            item
+            for item in [
+                workspace.address_line if workspace is not None else None,
+                workspace.city if workspace is not None else None,
+                workspace.state if workspace is not None else None,
+                workspace.country if workspace is not None else None,
+            ]
+            if item
+        )
+        or "Address unavailable"
+    )
+    line_items = [
+        {
+            "booking_id": booking.id,
+            "description": f"{workspace_title} - {booking.start_at.date().isoformat()}",
+            "service_date": booking.start_at.date(),
+            "start_at": booking.start_at,
+            "end_at": booking.end_at,
+            "quantity": 1,
+            "unit_price": booking.total_price,
+            "amount": booking.total_price,
+        }
+        for booking in bookings
+    ]
+    payment_summary = [
+        {
+            "payment_id": payment.id,
+            "provider": payment.provider,
+            "provider_reference": payment.provider_reference,
+            "provider_checkout_reference": payment.provider_checkout_reference,
+            "status": payment.status,
+            "amount": payment.amount,
+            "paid_at": payment.paid_at,
+            "refunded_at": payment.refunded_at,
+        }
+        for payment in settled_payments
+    ]
+    subtotal = sum((booking.total_price for booking in bookings), Decimal("0.00"))
     return BookingGroupReceiptResponse(
         booking_group_id=booking_group_id,
+        receipt_number=f"FS-{first_booking.created_at:%Y}-{str(booking_group_id)[:8].upper()}",
+        supplier={
+            "name": "FlexiStay",
+            "email": settings.email_from,
+            "address": "India",
+        },
+        customer={
+            "name": customer.full_name if customer is not None else "Guest",
+            "email": customer.email if customer is not None else None,
+            "address": None,
+        },
+        host={
+            "name": host.full_name if host is not None else "Host",
+            "email": host.email if host is not None else None,
+            "address": workspace_address,
+        },
+        workspace_title=workspace_title,
+        workspace_address=workspace_address,
+        line_items=line_items,
+        payment_summary=payment_summary,
         bookings=[BookingResponse.model_validate(booking) for booking in bookings],
         payments=[PaymentResponse.model_validate(payment) for payment in settled_payments],
+        subtotal=subtotal,
+        tax_total=Decimal("0.00"),
         total_paid=total_paid,
         total_refunded=total_refunded,
         net_paid=total_paid - total_refunded,

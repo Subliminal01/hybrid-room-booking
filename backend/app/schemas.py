@@ -533,10 +533,48 @@ class BookingGroupCancelResponse(BaseModel):
     total_refunded: Decimal
 
 
+class ReceiptPartyResponse(BaseModel):
+    name: str
+    email: str | None = None
+    address: str | None = None
+
+
+class ReceiptLineItemResponse(BaseModel):
+    booking_id: UUID
+    description: str
+    service_date: date
+    start_at: datetime
+    end_at: datetime
+    quantity: int = 1
+    unit_price: Decimal
+    amount: Decimal
+
+
+class ReceiptPaymentResponse(BaseModel):
+    payment_id: UUID
+    provider: str
+    provider_reference: str
+    provider_checkout_reference: str | None = None
+    status: PaymentStatus
+    amount: Decimal
+    paid_at: datetime | None
+    refunded_at: datetime | None
+
+
 class BookingGroupReceiptResponse(BaseModel):
     booking_group_id: UUID
+    receipt_number: str
+    supplier: ReceiptPartyResponse
+    customer: ReceiptPartyResponse
+    host: ReceiptPartyResponse
+    workspace_title: str
+    workspace_address: str
+    line_items: list[ReceiptLineItemResponse]
+    payment_summary: list[ReceiptPaymentResponse]
     bookings: list[BookingResponse]
     payments: list[PaymentResponse]
+    subtotal: Decimal
+    tax_total: Decimal
     total_paid: Decimal
     total_refunded: Decimal
     net_paid: Decimal

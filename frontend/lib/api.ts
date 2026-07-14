@@ -145,8 +145,48 @@ export type BookingGroupCancel = {
 
 export type BookingGroupReceipt = {
   booking_group_id: string;
+  receipt_number: string;
+  supplier: {
+    name: string;
+    email: string | null;
+    address: string | null;
+  };
+  customer: {
+    name: string;
+    email: string | null;
+    address: string | null;
+  };
+  host: {
+    name: string;
+    email: string | null;
+    address: string | null;
+  };
+  workspace_title: string;
+  workspace_address: string;
+  line_items: {
+    booking_id: string;
+    description: string;
+    service_date: string;
+    start_at: string;
+    end_at: string;
+    quantity: number;
+    unit_price: string;
+    amount: string;
+  }[];
+  payment_summary: {
+    payment_id: string;
+    provider: string;
+    provider_reference: string;
+    provider_checkout_reference: string | null;
+    status: "pending" | "succeeded" | "failed" | "refunded";
+    amount: string;
+    paid_at: string | null;
+    refunded_at: string | null;
+  }[];
   bookings: Booking[];
   payments: Payment[];
+  subtotal: string;
+  tax_total: string;
   total_paid: string;
   total_refunded: string;
   net_paid: string;

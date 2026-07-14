@@ -345,8 +345,19 @@ def test_booking_group_receipt_available_after_payment():
     assert body["total_refunded"] == "0.00"
     assert body["net_paid"] == "1700.00"
     assert body["currency"] == "INR"
+    assert body["receipt_number"].startswith("FS-")
+    assert body["supplier"]["name"] == "FlexiStay"
+    assert body["customer"]["email"] == "worker@example.com"
+    assert body["host"]["email"] == "host@example.com"
+    assert body["workspace_title"] == workspace["title"]
+    assert "Bengaluru" in body["workspace_address"]
+    assert body["subtotal"] == "1700.00"
+    assert body["tax_total"] == "0.00"
     assert len(body["bookings"]) == 2
     assert len(body["payments"]) == 2
+    assert len(body["line_items"]) == 2
+    assert len(body["payment_summary"]) == 2
+    assert {item["amount"] for item in body["line_items"]} == {"850.00"}
     assert {payment["status"] for payment in body["payments"]} == {"succeeded"}
 
     host_receipt_response = client.get(
