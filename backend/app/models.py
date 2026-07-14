@@ -56,6 +56,9 @@ class PaymentStatus(str, Enum):
 
 
 class AuditAction(str, Enum):
+    ADMIN_BOOTSTRAPPED = "admin_bootstrapped"
+    USER_PROFILE_UPDATED = "user_profile_updated"
+    PASSWORD_CHANGED = "password_changed"
     WORKSPACE_CREATED = "workspace_created"
     WORKSPACE_REVIEWED = "workspace_reviewed"
     BOOKING_PAID = "booking_paid"

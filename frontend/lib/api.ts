@@ -6,6 +6,9 @@ export type WorkspaceStatus = "draft" | "active" | "paused";
 export type WorkspaceReviewStatus = "pending" | "approved" | "rejected";
 export type BookingStatus = "pending" | "confirmed" | "cancelled" | "expired";
 export type AuditAction =
+  | "admin_bootstrapped"
+  | "user_profile_updated"
+  | "password_changed"
   | "workspace_created"
   | "workspace_reviewed"
   | "booking_paid"

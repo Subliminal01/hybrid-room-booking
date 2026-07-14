@@ -380,8 +380,20 @@ def bootstrap_admin_user(
         user.hashed_password = hash_password(request.password)
         user.is_active = True
         session.add(user)
-        session.commit()
-        session.refresh(user)
+
+    record_audit_event(
+        session,
+        actor_user_id=user.id,
+        action=AuditAction.ADMIN_BOOTSTRAPPED,
+        entity_type="user",
+        entity_id=user.id,
+        details={
+            "email": user.email,
+            "created": created,
+        },
+    )
+    session.commit()
+    session.refresh(user)
 
     return AdminBootstrapResponse(
         user=UserResponse.model_validate(user),
@@ -487,12 +499,24 @@ def update_current_user(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> User:
+    changed_fields: list[str] = []
     for field_name, value in request.model_dump(exclude_unset=True).items():
         if field_name == "full_name" and value is not None:
             value = value.strip()
-        setattr(current_user, field_name, value)
+        if getattr(current_user, field_name) != value:
+            setattr(current_user, field_name, value)
+            changed_fields.append(field_name)
 
     session.add(current_user)
+    if changed_fields:
+        record_audit_event(
+            session,
+            actor_user_id=current_user.id,
+            action=AuditAction.USER_PROFILE_UPDATED,
+            entity_type="user",
+            entity_id=current_user.id,
+            details={"changed_fields": sorted(changed_fields)},
+        )
     session.commit()
     session.refresh(current_user)
     return current_user
@@ -512,6 +536,14 @@ def change_password(
 
     current_user.hashed_password = hash_password(request.new_password)
     session.add(current_user)
+    record_audit_event(
+        session,
+        actor_user_id=current_user.id,
+        action=AuditAction.PASSWORD_CHANGED,
+        entity_type="user",
+        entity_id=current_user.id,
+        details={"method": "authenticated"},
+    )
     session.commit()
 
 
@@ -564,12 +596,23 @@ def confirm_password_reset(
     session: Session = Depends(get_session),
 ) -> User:
     try:
-        return reset_password_with_token(session, request.token, request.new_password)
+        user = reset_password_with_token(session, request.token, request.new_password)
     except AccountTokenError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
+    record_audit_event(
+        session,
+        actor_user_id=user.id,
+        action=AuditAction.PASSWORD_CHANGED,
+        entity_type="user",
+        entity_id=user.id,
+        details={"method": "password_reset"},
+    )
+    session.commit()
+    session.refresh(user)
+    return user
 
 
 @app.post(

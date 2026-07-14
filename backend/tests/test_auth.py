@@ -542,7 +542,83 @@ def test_admin_bootstrap_creates_admin_user(monkeypatch):
         json={"email": "admin@example.com", "password": "strong-admin-password"},
     )
     assert login_response.status_code == 200
+    admin_token = login_response.json()["access_token"]
     assert login_response.json()["user"]["role"] == "admin"
+
+    audit_response = client.get(
+        "/admin/audit-events?action=admin_bootstrapped",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert audit_response.status_code == 200
+    audit_body = audit_response.json()
+    assert audit_body["total"] == 1
+    assert audit_body["items"][0]["action"] == "admin_bootstrapped"
+    assert audit_body["items"][0]["details"] == {
+        "email": "admin@example.com",
+        "created": True,
+    }
+
+    app.dependency_overrides.clear()
+
+
+def test_account_security_changes_are_audited(monkeypatch):
+    app.dependency_overrides[get_session] = make_session_override()
+    monkeypatch.setattr(
+        "app.main.settings.admin_bootstrap_secret",
+        "valid-bootstrap-secret-value",
+    )
+    client = TestClient(app)
+    client.post(
+        "/admin/bootstrap",
+        json={
+            "email": "admin@example.com",
+            "password": "strong-admin-password",
+            "full_name": "Platform Admin",
+            "bootstrap_secret": "valid-bootstrap-secret-value",
+        },
+    )
+    login_response = client.post(
+        "/auth/login",
+        json={"email": "admin@example.com", "password": "strong-admin-password"},
+    )
+    admin_token = login_response.json()["access_token"]
+
+    update_response = client.patch(
+        "/auth/me",
+        json={"full_name": "Updated Admin", "phone_number": "+919999999999"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert update_response.status_code == 200
+
+    password_response = client.post(
+        "/auth/password",
+        json={
+            "current_password": "strong-admin-password",
+            "new_password": "new-strong-admin-password",
+        },
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert password_response.status_code == 204
+
+    profile_audit_response = client.get(
+        "/admin/audit-events?action=user_profile_updated",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert profile_audit_response.status_code == 200
+    profile_audit = profile_audit_response.json()["items"][0]
+    assert profile_audit["entity_type"] == "user"
+    assert profile_audit["details"] == {
+        "changed_fields": ["full_name", "phone_number"],
+    }
+
+    password_audit_response = client.get(
+        "/admin/audit-events?action=password_changed",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert password_audit_response.status_code == 200
+    password_audit = password_audit_response.json()["items"][0]
+    assert password_audit["entity_type"] == "user"
+    assert password_audit["details"] == {"method": "authenticated"}
 
     app.dependency_overrides.clear()
 
