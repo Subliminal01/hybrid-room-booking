@@ -273,6 +273,13 @@ test("worker email verification link updates saved session", async ({ page }) =>
   await expect(page).not.toHaveURL(/verification_token/);
 });
 
+test("email verification link works without an active session", async ({ page }) => {
+  await page.goto("/?verification_token=verify-token");
+
+  await expect(page.getByText("Email verified. Please sign in to continue.")).toBeVisible();
+  await expect(page).not.toHaveURL(/verification_token/);
+});
+
 test("host sees host dashboard and listing manager only", async ({ page }) => {
   await loginAs(page, "host");
 

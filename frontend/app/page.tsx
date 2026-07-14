@@ -647,7 +647,7 @@ export default function Home() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("verification_token")?.trim();
-    if (!token || !session) {
+    if (!token) {
       return;
     }
 
@@ -657,10 +657,12 @@ export default function Home() {
       if (cancelled) {
         return;
       }
-      const nextSession = { ...session, user: updatedUser };
-      persistSession(nextSession);
+      if (session) {
+        const nextSession = { ...session, user: updatedUser };
+        persistSession(nextSession);
+      }
       setVerificationToken("");
-      setMessage("Email verified.");
+      setMessage(session ? "Email verified." : "Email verified. Please sign in to continue.");
       params.delete("verification_token");
       const nextQuery = params.toString();
       const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${window.location.hash}`;
