@@ -675,6 +675,22 @@ export default function Home() {
   }, [session]);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("reset_token")?.trim();
+    if (!token) {
+      return;
+    }
+
+    setAuthMode("login");
+    setResetToken(token);
+    setMessage("Password reset link loaded. Enter a new password to continue.");
+    params.delete("reset_token");
+    const nextQuery = params.toString();
+    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${window.location.hash}`;
+    window.history.replaceState(null, "", nextUrl);
+  }, []);
+
+  useEffect(() => {
     const cursor = pendingDateCursor.current;
     if (!cursor) {
       return;

@@ -110,6 +110,24 @@ async function mockApi(page: Page) {
       });
     }
 
+    if (method === "POST" && path === "/auth/password-reset/request") {
+      return fulfillJson(route, {
+        message: "If the email is registered, password reset instructions have been sent",
+        reset_token: null,
+      });
+    }
+
+    if (method === "POST" && path === "/auth/password-reset/confirm") {
+      return fulfillJson(route, {
+        ...userFor("worker"),
+        email_verified_at: "2026-07-12T10:00:00Z",
+      });
+    }
+
+    if (method === "GET" && path === "/bookings/mine") {
+      return fulfillJson(route, { items: [], total: 0, limit: 10, offset: 0 });
+    }
+
     if (method === "GET" && path === "/workspaces/mine") {
       return fulfillJson(route, [workspace({ review_status: "pending" })]);
     }
@@ -263,7 +281,7 @@ test("worker email verification link updates saved session", async ({ page }) =>
   const session = sessionFor("worker");
   await page.goto("/");
   await page.evaluate((storedSession) => {
-    window.localStorage.setItem("hybrid-room-booking-session", JSON.stringify(storedSession));
+    window.localStorage.setItem("hybrid-stay-session", JSON.stringify(storedSession));
   }, session);
 
   await page.goto("/?verification_token=verify-token");
@@ -278,6 +296,28 @@ test("email verification link works without an active session", async ({ page })
 
   await expect(page.getByText("Email verified. Please sign in to continue.")).toBeVisible();
   await expect(page).not.toHaveURL(/verification_token/);
+});
+
+test("guest can request password reset instructions", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#resetEmail").fill("worker@example.com");
+  await page.getByRole("button", { name: "Request token" }).click();
+
+  await expect(page.getByText("Password reset instructions sent if the email exists.")).toBeVisible();
+});
+
+test("password reset email link loads token and resets password", async ({ page }) => {
+  await page.goto("/?reset_token=reset-token");
+
+  await expect(page.getByText("Password reset link loaded. Enter a new password to continue.")).toBeVisible();
+  await expect(page.locator("#resetToken")).toHaveValue("reset-token");
+  await expect(page).not.toHaveURL(/reset_token/);
+
+  await page.locator("#resetNewPassword").fill("new-strong-password");
+  await page.getByRole("button", { name: "Reset password" }).click();
+
+  await expect(page.getByText("Password reset. You can log in with the new password.")).toBeVisible();
+  await expect(page.locator("#password")).toHaveValue("new-strong-password");
 });
 
 test("host sees host dashboard and listing manager only", async ({ page }) => {
