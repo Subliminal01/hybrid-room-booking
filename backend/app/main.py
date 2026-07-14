@@ -60,6 +60,7 @@ from app.models import (
 from app.observability import configure_error_tracking, configure_logging, configure_observability
 from app.payment_service import (
     PaymentProviderError,
+    amount_to_minor_units,
     checkout_reference_for_payments,
     get_or_create_pending_payment,
     get_pending_payment,
@@ -1520,6 +1521,8 @@ async def handle_payment_webhook(
             event = "payment.failed"
         provider_reference = payment_entity.get("id")
         provider_checkout_reference = payment_entity.get("order_id")
+        provider_amount = payment_entity.get("amount")
+        provider_currency = payment_entity.get("currency")
 
     if event not in {"payment.succeeded", "payment.failed"}:
         raise HTTPException(
@@ -1556,6 +1559,20 @@ async def handle_payment_webhook(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Payment not found",
         )
+
+    if event == "payment.succeeded" and normalized_provider == "razorpay":
+        expected_amount = amount_to_minor_units(total_payment_amount(payments))
+        expected_currency = payments[0].currency if payments else "INR"
+        if provider_amount != expected_amount:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Razorpay payment amount does not match booking total",
+            )
+        if provider_currency != expected_currency:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Razorpay payment currency does not match booking currency",
+            )
 
     booking_pairs = []
     for payment in payments:
@@ -1599,9 +1616,13 @@ async def handle_payment_webhook(
         )
 
     if event == "payment.failed":
+        processed = False
         for payment, booking in booking_pairs:
+            if payment.status != PaymentStatus.PENDING:
+                continue
             mark_payment_failed(payment)
             session.add(payment)
+            processed = True
             record_audit_event(
                 session,
                 actor_user_id=None,
@@ -1626,15 +1647,23 @@ async def handle_payment_webhook(
             payment_id=first_payment.id,
             booking_id=first_booking.id,
             status=first_payment.status,
-            processed=True,
+            processed=processed,
         )
 
     now = utc_now()
+    processed = False
     for payment, booking in booking_pairs:
-        mark_payment_succeeded(payment, now)
-        booking.status = BookingStatus.CONFIRMED
+        payment_changed = payment.status != PaymentStatus.SUCCEEDED
+        booking_changed = booking.status == BookingStatus.PENDING
+        if payment_changed:
+            mark_payment_succeeded(payment, now)
+        if booking_changed:
+            booking.status = BookingStatus.CONFIRMED
         session.add(payment)
         session.add(booking)
+        if not payment_changed and not booking_changed:
+            continue
+        processed = True
         record_audit_event(
             session,
             actor_user_id=None,
@@ -1660,7 +1689,7 @@ async def handle_payment_webhook(
         payment_id=first_payment.id,
         booking_id=first_booking.id,
         status=first_payment.status,
-        processed=True,
+        processed=processed,
     )
 
 
