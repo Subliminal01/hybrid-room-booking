@@ -1199,6 +1199,11 @@ def test_host_revenue_summary_splits_paid_and_pending_bookings():
     body = revenue_response.json()
     assert body["total_paid"] == "850.00"
     assert body["total_refunded"] == "0.00"
+    assert body["gross_revenue"] == "850.00"
+    assert body["platform_commission_rate"] == "0.1"
+    assert body["platform_commission"] == "85.00"
+    assert body["host_net_revenue"] == "765.00"
+    assert body["pending_payout"] == "765.00"
     assert body["pending_hold_value"] == "850.00"
     assert body["confirmed_booking_count"] == 1
     assert body["cancelled_booking_count"] == 0
@@ -1254,6 +1259,10 @@ def test_cancel_paid_booking_refunds_payment_and_updates_revenue():
     body = revenue_response.json()
     assert body["total_paid"] == "0.00"
     assert body["total_refunded"] == "850.00"
+    assert body["gross_revenue"] == "0.00"
+    assert body["platform_commission"] == "0.00"
+    assert body["host_net_revenue"] == "0.00"
+    assert body["pending_payout"] == "0.00"
     assert body["confirmed_booking_count"] == 0
     assert body["cancelled_booking_count"] == 1
 
@@ -1303,6 +1312,8 @@ def test_booking_group_cancel_refunds_all_paid_rota_days():
     revenue = revenue_response.json()
     assert revenue["total_paid"] == "0.00"
     assert revenue["total_refunded"] == "1700.00"
+    assert revenue["gross_revenue"] == "0.00"
+    assert revenue["pending_payout"] == "0.00"
     assert revenue["cancelled_booking_count"] == 2
 
     app.dependency_overrides.clear()

@@ -1,7 +1,7 @@
 import hashlib
 import hmac
 import json
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -1949,10 +1949,24 @@ def get_host_revenue_summary(
     confirmed_booking_count = session.exec(confirmed_count_query).one()
     cancelled_booking_count = session.exec(cancelled_count_query).one()
     pending_booking_count = session.exec(pending_count_query).one()
+    total_paid_decimal = Decimal(str(total_paid))
+    total_refunded_decimal = Decimal(str(total_refunded))
+    gross_revenue = max(total_paid_decimal - total_refunded_decimal, Decimal("0.00"))
+    commission_rate = Decimal(str(settings.platform_commission_rate))
+    platform_commission = (gross_revenue * commission_rate).quantize(
+        Decimal("0.01"),
+        rounding=ROUND_HALF_UP,
+    )
+    host_net_revenue = gross_revenue - platform_commission
 
     return HostRevenueSummaryResponse(
-        total_paid=Decimal(str(total_paid)),
-        total_refunded=Decimal(str(total_refunded)),
+        total_paid=total_paid_decimal,
+        total_refunded=total_refunded_decimal,
+        gross_revenue=gross_revenue,
+        platform_commission_rate=commission_rate,
+        platform_commission=platform_commission,
+        host_net_revenue=host_net_revenue,
+        pending_payout=host_net_revenue,
         pending_hold_value=Decimal(str(pending_hold_value)),
         confirmed_booking_count=confirmed_booking_count,
         cancelled_booking_count=cancelled_booking_count,

@@ -140,6 +140,11 @@ async function mockApi(page: Page) {
       return fulfillJson(route, {
         total_paid: "0.00",
         total_refunded: "0.00",
+        gross_revenue: "0.00",
+        platform_commission_rate: "0.10",
+        platform_commission: "0.00",
+        host_net_revenue: "0.00",
+        pending_payout: "0.00",
         pending_hold_value: "0.00",
         confirmed_booking_count: 0,
         cancelled_booking_count: 0,

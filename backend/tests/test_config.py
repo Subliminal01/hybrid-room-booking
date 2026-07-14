@@ -32,6 +32,7 @@ def test_development_allows_local_defaults(monkeypatch):
         "ACCESS_TOKEN_EXPIRE_MINUTES",
         "REFRESH_TOKEN_EXPIRE_DAYS",
         "BOOKING_HOLD_MINUTES",
+        "PLATFORM_COMMISSION_RATE",
         "TRUST_PROXY_HEADERS",
         "PAYMENT_PROVIDER",
         "RAZORPAY_KEY_ID",
@@ -60,7 +61,18 @@ def test_development_allows_local_defaults(monkeypatch):
     assert settings.app_env == "development"
     assert settings.auth_secret_key == "dev-only-change-me"
     assert settings.payment_provider == "mock"
+    assert settings.platform_commission_rate == 0.10
     assert "http://localhost:3000" in settings.cors_origins
+
+    clear_settings_cache()
+
+
+def test_rejects_invalid_platform_commission_rate(monkeypatch):
+    clear_settings_cache()
+    monkeypatch.setenv("PLATFORM_COMMISSION_RATE", "1.5")
+
+    with pytest.raises(ConfigError, match="PLATFORM_COMMISSION_RATE"):
+        get_settings()
 
     clear_settings_cache()
 

@@ -586,6 +586,11 @@ class BookingGroupReceiptResponse(BaseModel):
 class HostRevenueSummaryResponse(BaseModel):
     total_paid: Decimal
     total_refunded: Decimal
+    gross_revenue: Decimal
+    platform_commission_rate: Decimal
+    platform_commission: Decimal
+    host_net_revenue: Decimal
+    pending_payout: Decimal
     pending_hold_value: Decimal
     confirmed_booking_count: int
     cancelled_booking_count: int

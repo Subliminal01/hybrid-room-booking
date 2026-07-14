@@ -96,6 +96,7 @@ class Settings:
         self.access_token_expire_minutes = parse_int_env("ACCESS_TOKEN_EXPIRE_MINUTES", 60)
         self.refresh_token_expire_days = parse_int_env("REFRESH_TOKEN_EXPIRE_DAYS", 30)
         self.booking_hold_minutes = parse_int_env("BOOKING_HOLD_MINUTES", 30)
+        self.platform_commission_rate = parse_float_env("PLATFORM_COMMISSION_RATE", 0.10)
         self.auth_rate_limit_per_minute = parse_int_env("AUTH_RATE_LIMIT_PER_MINUTE", 120)
         self.trust_proxy_headers = parse_bool_env_strict("TRUST_PROXY_HEADERS")
         self.upload_dir = getenv("UPLOAD_DIR", "uploads").strip() or "uploads"
@@ -175,6 +176,9 @@ class Settings:
 
         if not 0 <= self.sentry_traces_sample_rate <= 1:
             raise ConfigError("SENTRY_TRACES_SAMPLE_RATE must be between 0 and 1")
+
+        if not 0 <= self.platform_commission_rate <= 1:
+            raise ConfigError("PLATFORM_COMMISSION_RATE must be between 0 and 1")
 
         if self.sentry_dsn and not self.sentry_environment:
             raise ConfigError("SENTRY_ENVIRONMENT is required when SENTRY_DSN is set")

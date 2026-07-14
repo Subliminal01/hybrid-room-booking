@@ -258,6 +258,7 @@ PAYMENT_PROVIDER=razorpay
 RAZORPAY_KEY_ID=<razorpay-key-id>
 RAZORPAY_KEY_SECRET=<razorpay-key-secret>
 RAZORPAY_WEBHOOK_SECRET=<razorpay-webhook-secret>
+PLATFORM_COMMISSION_RATE=0.10
 ```
 
 For SMTP instead of Brevo, set:
@@ -303,6 +304,10 @@ Mock/dev webhooks use `X-Mock-Signature`; Razorpay uses
 The manual payment-confirm endpoints are available only when
 `PAYMENT_PROVIDER=mock`. Razorpay and Stripe deployments must rely on signed
 webhooks for payment confirmation.
+
+`PLATFORM_COMMISSION_RATE` controls the commission shown in host revenue and
+payout summaries. The default is `0.10`, meaning 10% platform commission and
+90% host net earnings after refunds.
 
 `AUTH_RATE_LIMIT_PER_MINUTE` controls the in-memory rate limit for sensitive
 auth endpoints such as login, registration, refresh, and password reset. For a

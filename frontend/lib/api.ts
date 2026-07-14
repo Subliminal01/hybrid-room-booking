@@ -198,6 +198,11 @@ export type BookingGroupReceipt = {
 export type HostRevenueSummary = {
   total_paid: string;
   total_refunded: string;
+  gross_revenue: string;
+  platform_commission_rate: string;
+  platform_commission: string;
+  host_net_revenue: string;
+  pending_payout: string;
   pending_hold_value: string;
   confirmed_booking_count: number;
   cancelled_booking_count: number;

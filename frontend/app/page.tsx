@@ -3553,8 +3553,32 @@ export default function Home() {
                   <div className="metric">
                     <Wallet size={18} />
                     <div>
-                      <span>Paid revenue</span>
-                      <strong>{formatMoney(hostRevenue.total_paid, hostRevenue.currency)}</strong>
+                      <span>Host net earnings</span>
+                      <strong>{formatMoney(hostRevenue.host_net_revenue, hostRevenue.currency)}</strong>
+                    </div>
+                  </div>
+                  <div className="metric">
+                    <Wallet size={18} />
+                    <div>
+                      <span>Pending payout</span>
+                      <strong>{formatMoney(hostRevenue.pending_payout, hostRevenue.currency)}</strong>
+                    </div>
+                  </div>
+                  <div className="metric">
+                    <Wallet size={18} />
+                    <div>
+                      <span>Gross collected</span>
+                      <strong>{formatMoney(hostRevenue.gross_revenue, hostRevenue.currency)}</strong>
+                    </div>
+                  </div>
+                  <div className="metric">
+                    <History size={18} />
+                    <div>
+                      <span>Platform commission</span>
+                      <strong>{formatMoney(hostRevenue.platform_commission, hostRevenue.currency)}</strong>
+                      <div className="muted">
+                        {(Number(hostRevenue.platform_commission_rate) * 100).toFixed(0)}%
+                      </div>
                     </div>
                   </div>
                   <div className="metric">
