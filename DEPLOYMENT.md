@@ -253,6 +253,19 @@ production, for example `0.05`, to sample performance traces without creating
 too much noise. Unhandled backend exceptions include the app request ID,
 HTTP method, and path in Sentry context.
 
+Frontend runtime monitoring is also wired. The Next app listens for uncaught
+browser errors and unhandled promise rejections, then posts a sanitized report
+to:
+
+```text
+POST /monitoring/client-errors
+```
+
+These reports are written to structured backend logs as `client_error_reported`
+with the same `X-Request-ID` response header. In Render, use log search or a log
+drain to alert on `client_error_reported` until a dedicated frontend Sentry
+project is added.
+
 ## 10. Rollback Notes
 
 - Roll back application containers first.

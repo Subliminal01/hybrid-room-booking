@@ -57,7 +57,7 @@ from app.models import (
     WorkspaceReviewStatus,
     utc_now,
 )
-from app.observability import configure_error_tracking, configure_logging, configure_observability
+from app.observability import configure_error_tracking, configure_logging, configure_observability, logger
 from app.payment_service import (
     PaymentProviderError,
     amount_to_minor_units,
@@ -92,6 +92,8 @@ from app.schemas import (
     BookingGroupReceiptResponse,
     BookingPageResponse,
     BookingResponse,
+    ClientErrorReportRequest,
+    ClientErrorReportResponse,
     EmailVerificationConfirmRequest,
     EmailVerificationRequestResponse,
     HostRevenueSummaryResponse,
@@ -322,6 +324,27 @@ def health_live() -> dict[str, str]:
 def health_ready(session: Session = Depends(get_session)) -> dict[str, str]:
     session.exec(text("SELECT 1")).one()
     return {"status": "ready", "database": "ok"}
+
+
+@app.post("/monitoring/client-errors", response_model=ClientErrorReportResponse)
+def report_client_error(
+    request_body: ClientErrorReportRequest,
+    request: Request,
+) -> ClientErrorReportResponse:
+    request_id = getattr(request.state, "request_id", None) or request.headers.get("X-Request-ID") or "unknown"
+    logger.error(
+        "client_error_reported",
+        extra={
+            "request_id": request_id,
+            "source": request_body.source,
+            "client_url": request_body.url,
+            "client_message": request_body.message,
+            "stack": request_body.stack,
+            "component_stack": request_body.component_stack,
+            "user_agent": request_body.user_agent,
+        },
+    )
+    return ClientErrorReportResponse(status="accepted", request_id=request_id)
 
 
 @app.post("/admin/bootstrap", response_model=AdminBootstrapResponse)

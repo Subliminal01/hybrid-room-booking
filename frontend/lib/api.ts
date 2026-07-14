@@ -368,6 +368,27 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}): Promis
   return response.json() as Promise<T>;
 }
 
+export function reportClientError(payload: {
+  message: string;
+  source?: string;
+  url?: string | null;
+  stack?: string | null;
+  component_stack?: string | null;
+  user_agent?: string | null;
+}) {
+  return fetch(`${API_BASE_URL}/monitoring/client-errors`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      source: "frontend",
+      ...payload,
+    }),
+    keepalive: true,
+  }).catch(() => undefined);
+}
+
 async function apiFormRequest<T>(path: string, token: string, body: FormData): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",

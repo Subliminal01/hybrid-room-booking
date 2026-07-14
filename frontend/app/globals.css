@@ -95,6 +95,13 @@ a:hover {
   padding: 24px clamp(18px, 4vw, 48px) 48px;
 }
 
+.error-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+}
+
 .site-footer {
   display: flex;
   flex-wrap: wrap;

@@ -209,6 +209,20 @@ class AdminStorageStatusResponse(BaseModel):
     missing_settings: list[str]
 
 
+class ClientErrorReportRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=1000)
+    source: str = Field(default="frontend", max_length=80)
+    url: str | None = Field(default=None, max_length=2048)
+    stack: str | None = Field(default=None, max_length=6000)
+    component_stack: str | None = Field(default=None, max_length=6000)
+    user_agent: str | None = Field(default=None, max_length=500)
+
+
+class ClientErrorReportResponse(BaseModel):
+    status: str
+    request_id: str
+
+
 class TimeSlot(BaseModel):
     start_at: datetime
     end_at: datetime

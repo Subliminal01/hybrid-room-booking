@@ -94,6 +94,32 @@ def test_liveness_and_readiness_endpoints():
     app.dependency_overrides.clear()
 
 
+def test_client_error_report_is_logged(caplog):
+    client = TestClient(app)
+
+    with caplog.at_level(logging.ERROR, logger="app.requests"):
+        response = client.post(
+            "/monitoring/client-errors",
+            json={
+                "message": "Frontend crashed",
+                "source": "frontend",
+                "url": "https://hybrid-room-booking.vercel.app/",
+                "stack": "Error: Frontend crashed",
+                "user_agent": "Playwright",
+            },
+            headers={"X-Request-ID": "client-error-123"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "accepted", "request_id": "client-error-123"}
+    record = next(record for record in caplog.records if record.message == "client_error_reported")
+    assert record.request_id == "client-error-123"
+    assert record.source == "frontend"
+    assert record.client_url == "https://hybrid-room-booking.vercel.app/"
+    assert record.client_message == "Frontend crashed"
+    assert record.message == "client_error_reported"
+
+
 def test_http_errors_include_request_id_and_error_code():
     app.dependency_overrides[get_session] = make_session_override()
     client = TestClient(app)
