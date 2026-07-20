@@ -548,15 +548,15 @@ export default function Home() {
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [activeTab, setActiveTab] = useState<DashboardTab>("worker");
   const [session, setSession] = useState<TokenResponse | null>(null);
-  const [email, setEmail] = useState("worker@example.com");
-  const [password, setPassword] = useState("strong-password");
-  const [fullName, setFullName] = useState("Hybrid Worker");
-  const [profileName, setProfileName] = useState("Hybrid Worker");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [profileName, setProfileName] = useState("");
   const [profilePhone, setProfilePhone] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [verificationToken, setVerificationToken] = useState("");
-  const [resetEmail, setResetEmail] = useState("worker@example.com");
+  const [resetEmail, setResetEmail] = useState("");
   const [resetToken, setResetToken] = useState("");
   const [resetNewPassword, setResetNewPassword] = useState("");
   const [role, setRole] = useState<"worker" | "host">("worker");
@@ -831,7 +831,10 @@ export default function Home() {
   function clearSessionState() {
     window.localStorage.removeItem(SESSION_STORAGE_KEY);
     setSession(null);
-    setProfileName("Hybrid Worker");
+    setEmail("");
+    setPassword("");
+    setFullName("");
+    setProfileName("");
     setProfilePhone("");
     setCurrentPassword("");
     setNewPassword("");
@@ -1919,6 +1922,7 @@ export default function Home() {
                     <label htmlFor="fullName">Name</label>
                     <input
                       id="fullName"
+                      placeholder="Your full name"
                       value={fullName}
                       onChange={(event) => setFullName(event.target.value)}
                     />
@@ -1942,6 +1946,7 @@ export default function Home() {
                 <input
                   id="email"
                   type="email"
+                  placeholder="you@example.com"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                 />
@@ -1951,6 +1956,7 @@ export default function Home() {
                 <input
                   id="password"
                   type="password"
+                  placeholder={authMode === "login" ? "Enter your password" : "Create a password"}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                 />
@@ -1971,6 +1977,7 @@ export default function Home() {
                   <input
                     id="resetEmail"
                     type="email"
+                    placeholder="you@example.com"
                     value={resetEmail}
                     onChange={(event) => setResetEmail(event.target.value)}
                   />
