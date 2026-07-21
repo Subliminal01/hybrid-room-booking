@@ -88,6 +88,23 @@ a:hover {
   gap: 12px;
 }
 
+.session-profile-button {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 700;
+}
+
+.session-profile-button:hover,
+.session-profile-button.active {
+  border-color: var(--line);
+  background: #fff;
+  color: var(--text);
+}
+
 .content {
   display: grid;
   grid-template-columns: minmax(280px, 380px) 1fr;
@@ -392,6 +409,28 @@ a:hover {
   padding: 10px 12px;
   color: #2d5148;
   font-weight: 800;
+}
+
+.profile-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  padding: 14px;
+}
+
+.profile-summary span {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.profile-summary strong {
+  display: block;
+  margin-top: 2px;
 }
 
 .slot-row {

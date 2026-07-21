@@ -68,7 +68,7 @@ import {
 } from "@/lib/api";
 
 type AuthMode = "login" | "register";
-type DashboardTab = "worker" | "host" | "admin";
+type DashboardTab = "worker" | "host" | "admin" | "profile";
 
 type SlotDraft = {
   date: string;
@@ -1923,9 +1923,13 @@ export default function Home() {
         <div className="session">
           {session ? (
             <>
-              <div className="session-meta">
+              <button
+                className={`session-profile-button ${activeTab === "profile" ? "active" : ""}`}
+                type="button"
+                onClick={() => setActiveTab("profile")}
+              >
                 {session.user.full_name} · {session.user.role}
-              </div>
+              </button>
               <button
                 className="btn secondary"
                 type="button"
@@ -2063,103 +2067,7 @@ export default function Home() {
               </form>
             </div>
           </section>
-          ) : (
-            <section className="panel">
-              <div className="panel-header">
-                <div>
-                  <h2>Dashboard</h2>
-                  <div className="muted">{session.user.email}</div>
-                </div>
-                <LogIn size={18} />
-              </div>
-              <div className="panel-body">
-                <div className="mode-badge" aria-label="Current dashboard mode">
-                  {activeTab === "worker" ? "Worker dashboard" : null}
-                  {activeTab === "host" ? "Host dashboard" : null}
-                  {activeTab === "admin" ? "Admin dashboard" : null}
-                </div>
-                <div className="account-form">
-                  <div className="security-row">
-                    <div>
-                      <strong>Email verification</strong>
-                      <div className={`status ${session.user.email_verified_at ? "" : "pending"}`}>
-                        {session.user.email_verified_at ? "verified" : "pending"}
-                      </div>
-                    </div>
-                    <button
-                      className="btn secondary"
-                      type="button"
-                      onClick={() => void handleRequestEmailVerification()}
-                      disabled={busy || Boolean(session.user.email_verified_at)}
-                    >
-                      <MailCheck size={16} />
-                      Send token
-                    </button>
-                  </div>
-                  {!session.user.email_verified_at ? (
-                    <form className="inline-form" onSubmit={handleConfirmEmailVerification}>
-                      <div className="field">
-                        <label htmlFor="verificationToken">Verification token</label>
-                        <input
-                          id="verificationToken"
-                          value={verificationToken}
-                          onChange={(event) => setVerificationToken(event.target.value)}
-                        />
-                      </div>
-                      <button className="btn secondary" type="submit" disabled={busy}>
-                        <ShieldCheck size={16} />
-                        Verify
-                      </button>
-                    </form>
-                  ) : null}
-                </div>
-                <form className="account-form" onSubmit={handleProfileUpdate}>
-                  <div className="field">
-                    <label htmlFor="profileName">Name</label>
-                    <input
-                      id="profileName"
-                      value={profileName}
-                      onChange={(event) => setProfileName(event.target.value)}
-                    />
-                  </div>
-                  <div className="field">
-                    <label htmlFor="profilePhone">Phone</label>
-                    <input
-                      id="profilePhone"
-                      value={profilePhone}
-                      onChange={(event) => setProfilePhone(event.target.value)}
-                    />
-                  </div>
-                  <button className="btn secondary" type="submit" disabled={busy}>
-                    Save profile
-                  </button>
-                </form>
-                <form className="account-form" onSubmit={handlePasswordChange}>
-                  <div className="field">
-                    <label htmlFor="currentPassword">Current password</label>
-                    <input
-                      id="currentPassword"
-                      type="password"
-                      value={currentPassword}
-                      onChange={(event) => setCurrentPassword(event.target.value)}
-                    />
-                  </div>
-                  <div className="field">
-                    <label htmlFor="newPassword">New password</label>
-                    <input
-                      id="newPassword"
-                      type="password"
-                      value={newPassword}
-                      onChange={(event) => setNewPassword(event.target.value)}
-                    />
-                  </div>
-                  <button className="btn secondary" type="submit" disabled={busy}>
-                    Change password
-                  </button>
-                </form>
-              </div>
-            </section>
-          )}
+          ) : null}
 
           {activeTab === "worker" ? (
           <section className="panel">
@@ -2404,6 +2312,115 @@ export default function Home() {
             <div className="error" role="alert">
               {error}
             </div>
+          ) : null}
+
+          {activeTab === "profile" && session ? (
+            <section className="panel">
+              <div className="panel-header">
+                <div>
+                  <h2>Profile</h2>
+                  <div className="muted">{session.user.email}</div>
+                </div>
+                <LogIn size={18} />
+              </div>
+              <div className="panel-body">
+                <div className="profile-summary">
+                  <div>
+                    <span>Signed in as</span>
+                    <strong>{session.user.full_name}</strong>
+                    <div className="muted">{session.user.role}</div>
+                  </div>
+                  <div className={`status ${session.user.email_verified_at ? "" : "pending"}`}>
+                    {session.user.email_verified_at ? "email verified" : "email pending"}
+                  </div>
+                </div>
+                <div className="account-form">
+                  <div className="security-row">
+                    <div>
+                      <strong>Email verification</strong>
+                      <div className="muted">
+                        {session.user.email_verified_at
+                          ? `Verified ${formatDateTime(session.user.email_verified_at)}`
+                          : "Verify your email to keep the account trusted."}
+                      </div>
+                    </div>
+                    <button
+                      className="btn secondary"
+                      type="button"
+                      onClick={() => void handleRequestEmailVerification()}
+                      disabled={busy || Boolean(session.user.email_verified_at)}
+                    >
+                      <MailCheck size={16} />
+                      Send token
+                    </button>
+                  </div>
+                  {!session.user.email_verified_at ? (
+                    <form className="inline-form" onSubmit={handleConfirmEmailVerification}>
+                      <div className="field">
+                        <label htmlFor="verificationToken">Verification token</label>
+                        <input
+                          id="verificationToken"
+                          value={verificationToken}
+                          onChange={(event) => setVerificationToken(event.target.value)}
+                        />
+                      </div>
+                      <button className="btn secondary" type="submit" disabled={busy}>
+                        <ShieldCheck size={16} />
+                        Verify
+                      </button>
+                    </form>
+                  ) : null}
+                </div>
+                <form className="account-form" onSubmit={handleProfileUpdate}>
+                  <div className="grid-2">
+                    <div className="field">
+                      <label htmlFor="profileName">Name</label>
+                      <input
+                        id="profileName"
+                        value={profileName}
+                        onChange={(event) => setProfileName(event.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="profilePhone">Phone</label>
+                      <input
+                        id="profilePhone"
+                        value={profilePhone}
+                        onChange={(event) => setProfilePhone(event.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <button className="btn secondary" type="submit" disabled={busy}>
+                    Save profile
+                  </button>
+                </form>
+                <form className="account-form" onSubmit={handlePasswordChange}>
+                  <div className="grid-2">
+                    <div className="field">
+                      <label htmlFor="currentPassword">Current password</label>
+                      <input
+                        id="currentPassword"
+                        type="password"
+                        value={currentPassword}
+                        onChange={(event) => setCurrentPassword(event.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="newPassword">New password</label>
+                      <input
+                        id="newPassword"
+                        type="password"
+                        value={newPassword}
+                        onChange={(event) => setNewPassword(event.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <button className="btn secondary" type="submit" disabled={busy}>
+                    Change password
+                  </button>
+                </form>
+              </div>
+            </section>
           ) : null}
 
           {activeTab === "admin" && isAdmin ? (
@@ -3386,7 +3403,7 @@ export default function Home() {
           </section>
           ) : null}
 
-          {activeTab !== "admin" ? (
+          {activeTab === "worker" || activeTab === "host" ? (
           <section className="panel">
             <div className="panel-header">
               <div>
