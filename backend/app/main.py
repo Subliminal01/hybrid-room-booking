@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlmodel import Session, text, select
 
@@ -33,6 +33,7 @@ from app.booking_service import (
     calculate_booking_total,
     expire_stale_pending_bookings,
     find_available_workspaces,
+    find_workspace_slot_matches,
     workspace_has_blackout_for_slots,
     workspace_is_available_for_slots,
     workspace_has_conflict,
@@ -90,6 +91,7 @@ from app.schemas import (
     BookingGroupCancelResponse,
     BookingGroupCheckoutResponse,
     BookingGroupReceiptResponse,
+    ItineraryBookingCreateRequest,
     BookingPageResponse,
     BookingResponse,
     ClientErrorReportRequest,
@@ -254,12 +256,23 @@ def normalize_idempotency_key(idempotency_key: str | None) -> str | None:
     return normalized
 
 
-def booking_request_hash(request: BookingCreateRequest) -> str:
+def booking_request_hash(request: BookingCreateRequest | ItineraryBookingCreateRequest) -> str:
     payload = request.model_dump(mode="json")
-    payload["slots"] = sorted(
-        payload["slots"],
-        key=lambda slot: (slot["start_at"], slot["end_at"]),
-    )
+    if "slots" in payload:
+        payload["slots"] = sorted(
+            payload["slots"],
+            key=lambda slot: (slot["start_at"], slot["end_at"]),
+        )
+    if "items" in payload:
+        for item in payload["items"]:
+            item["slots"] = sorted(
+                item["slots"],
+                key=lambda slot: (slot["start_at"], slot["end_at"]),
+            )
+        payload["items"] = sorted(
+            payload["items"],
+            key=lambda item: (item["workspace_id"], item["slots"]),
+        )
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -308,6 +321,45 @@ def replay_or_reject_idempotent_booking(
             detail="Idempotency key was already used with a different booking request",
         )
     return booking_group_create_response(session, existing_key.booking_group_id)
+
+
+def get_bookable_workspace_or_raise(
+    session: Session,
+    *,
+    workspace_id: UUID,
+    slots: list,
+) -> Workspace:
+    workspace = session.get(Workspace, workspace_id)
+    if workspace is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workspace not found",
+        )
+    if workspace.review_status != WorkspaceReviewStatus.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Workspace is not approved for booking",
+        )
+
+    if not workspace_is_available_for_slots(session, workspace, slots):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Workspace is not available during one or more requested slots",
+        )
+
+    if workspace_has_blackout_for_slots(session, workspace, slots):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Workspace is blocked on one or more requested dates",
+        )
+
+    if workspace_has_conflict(session, workspace_id, slots):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Workspace is not available for one or more requested slots",
+        )
+
+    return workspace
 
 
 @app.get("/health")
@@ -1098,7 +1150,7 @@ def search_workspaces(
     session: Session = Depends(get_session),
 ) -> list[WorkspaceSearchResult]:
     expire_stale_pending_bookings(session)
-    workspaces = find_available_workspaces(
+    workspace_matches = find_workspace_slot_matches(
         session,
         slots=request.slots,
         city=request.city,
@@ -1116,14 +1168,15 @@ def search_workspaces(
             country=workspace.country,
             photo_url=workspace.photo_url,
             daily_price=workspace.daily_price,
-            estimated_total_price=calculate_booking_total(workspace, request.slots),
-            matched_slot_count=len(request.slots),
+            estimated_total_price=calculate_booking_total(workspace, matched_slots),
+            matched_slot_count=len(matched_slots),
+            matched_slots=matched_slots,
             currency=workspace.currency,
             capacity=workspace.capacity,
             review_status=workspace.review_status,
             amenities=workspace.amenities,
         )
-        for workspace in workspaces
+        for workspace, matched_slots in workspace_matches
     ]
 
 
@@ -1154,35 +1207,11 @@ def create_booking(
                 request_hash=request_hash,
             )
 
-    workspace = session.get(Workspace, request.workspace_id)
-    if workspace is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Workspace not found",
-        )
-    if workspace.review_status != WorkspaceReviewStatus.APPROVED:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Workspace is not approved for booking",
-        )
-
-    if not workspace_is_available_for_slots(session, workspace, request.slots):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Workspace is not available during one or more requested slots",
-        )
-
-    if workspace_has_blackout_for_slots(session, workspace, request.slots):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Workspace is blocked on one or more requested dates",
-        )
-
-    if workspace_has_conflict(session, request.workspace_id, request.slots):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Workspace is not available for one or more requested slots",
-        )
+    workspace = get_bookable_workspace_or_raise(
+        session,
+        workspace_id=request.workspace_id,
+        slots=request.slots,
+    )
 
     bookings = build_booking_rows(
         workspace=workspace,
@@ -1230,6 +1259,104 @@ def create_booking(
         session.refresh(booking)
 
     return booking_group_create_response(session, bookings[0].booking_group_id)
+
+
+@app.post(
+    "/booking-itineraries",
+    response_model=BookingCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_booking_itinerary(
+    request: ItineraryBookingCreateRequest,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> BookingCreateResponse:
+    expire_stale_pending_bookings(session)
+    normalized_idempotency_key = normalize_idempotency_key(idempotency_key)
+    request_hash = booking_request_hash(request)
+    if normalized_idempotency_key is not None:
+        existing_key = get_existing_booking_idempotency_key(
+            session,
+            user_id=current_user.id,
+            key=normalized_idempotency_key,
+        )
+        if existing_key is not None:
+            return replay_or_reject_idempotent_booking(
+                session,
+                existing_key=existing_key,
+                request_hash=request_hash,
+            )
+
+    all_slots = sorted(
+        [slot for item in request.items for slot in item.slots],
+        key=lambda slot: slot.start_at,
+    )
+    for index, slot in enumerate(all_slots[:-1]):
+        next_slot = all_slots[index + 1]
+        if slot.start_at < next_slot.end_at and slot.end_at > next_slot.start_at:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Itinerary contains overlapping stays",
+            )
+
+    booking_group_id = uuid4()
+    bookings = []
+    for item in request.items:
+        workspace = get_bookable_workspace_or_raise(
+            session,
+            workspace_id=item.workspace_id,
+            slots=item.slots,
+        )
+        bookings.extend(
+            build_booking_rows(
+                workspace=workspace,
+                user_id=current_user.id,
+                slots=item.slots,
+                rota_label=request.rota_label,
+                notes=request.notes,
+                booking_group_id=booking_group_id,
+            )
+        )
+
+    if normalized_idempotency_key is not None:
+        session.add(
+            BookingIdempotencyKey(
+                user_id=current_user.id,
+                key=normalized_idempotency_key,
+                request_hash=request_hash,
+                booking_group_id=booking_group_id,
+            )
+        )
+
+    for booking in bookings:
+        session.add(booking)
+
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        if normalized_idempotency_key is not None:
+            existing_key = get_existing_booking_idempotency_key(
+                session,
+                user_id=current_user.id,
+                key=normalized_idempotency_key,
+            )
+            if existing_key is not None:
+                return replay_or_reject_idempotent_booking(
+                    session,
+                    existing_key=existing_key,
+                    request_hash=request_hash,
+                )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="One or more stays were booked by another request",
+        ) from exc
+
+    for booking in bookings:
+        session.refresh(booking)
+
+    return booking_group_create_response(session, booking_group_id)
 
 
 @app.post("/bookings/{booking_id}/payment-intent", response_model=PaymentResponse)
@@ -1461,10 +1588,20 @@ def get_booking_group_receipt(
         if payment.paid_at is not None
     ]
     first_booking = bookings[0]
-    workspace = first_booking.workspace
-    host = workspace.owner if workspace is not None else None
+    workspaces = [booking.workspace for booking in bookings if booking.workspace is not None]
+    unique_workspace_ids = {workspace.id for workspace in workspaces}
+    workspace = workspaces[0] if len(unique_workspace_ids) == 1 and workspaces else None
+    hosts = [workspace.owner for workspace in workspaces if workspace.owner is not None]
+    unique_host_ids = {host.id for host in hosts}
+    host = hosts[0] if len(unique_host_ids) == 1 and hosts else None
     customer = first_booking.user
-    workspace_title = workspace.title if workspace is not None else "Workspace booking"
+    workspace_title = (
+        workspace.title
+        if workspace is not None
+        else "Multiple workspaces"
+        if len(unique_workspace_ids) > 1
+        else "Workspace booking"
+    )
     workspace_address = (
         ", ".join(
             item
@@ -1476,12 +1613,12 @@ def get_booking_group_receipt(
             ]
             if item
         )
-        or "Address unavailable"
+        or ("Multiple workspace addresses" if len(unique_workspace_ids) > 1 else "Address unavailable")
     )
     line_items = [
         {
             "booking_id": booking.id,
-            "description": f"{workspace_title} - {booking.start_at.date().isoformat()}",
+            "description": f"{booking.workspace.title if booking.workspace is not None else 'Workspace booking'} - {booking.start_at.date().isoformat()}",
             "service_date": booking.start_at.date(),
             "start_at": booking.start_at,
             "end_at": booking.end_at,

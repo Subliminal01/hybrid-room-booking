@@ -10,6 +10,7 @@ from app.booking_service import (
     build_booking_rows,
     expire_stale_pending_bookings,
     find_available_workspaces,
+    find_workspace_slot_matches,
     workspace_has_conflict,
 )
 from app.models import (
@@ -213,6 +214,26 @@ def test_search_respects_weekly_workspace_availability(session: Session):
     )
 
     assert [workspace.id for workspace in results] == [monday_wednesday_workspace.id]
+
+
+def test_partial_search_returns_workspace_with_only_matching_slots(session: Session):
+    monday_wednesday_workspace = create_workspace(session, title="MW room")
+    tuesday_workspace = create_workspace(session, title="Tuesday room")
+    add_availability_rule(session, workspace=monday_wednesday_workspace, day_of_week=0)
+    add_availability_rule(session, workspace=monday_wednesday_workspace, day_of_week=2)
+    add_availability_rule(session, workspace=tuesday_workspace, day_of_week=1)
+
+    results = find_workspace_slot_matches(
+        session,
+        city="Bengaluru",
+        max_daily_price=Decimal("1000.00"),
+        slots=[slot(15), slot(16), slot(17), slot(18), slot(19)],
+    )
+
+    assert [(workspace.title, [matched.start_at.day for matched in slots]) for workspace, slots in results] == [
+        ("MW room", [15, 17]),
+        ("Tuesday room", [16]),
+    ]
 
 
 def test_search_excludes_workspace_when_requested_time_is_outside_rule(session: Session):

@@ -88,23 +88,30 @@ def register_user(client: TestClient, *, email: str, role: str = "worker") -> di
     return response.json()
 
 
-def create_workspace(client: TestClient, *, host_token: str) -> dict:
+def create_workspace(
+    client: TestClient,
+    *,
+    host_token: str,
+    title: str = "Koramangala work room",
+    daily_price: str = "850.00",
+    admin_email: str = "admin-review@example.com",
+) -> dict:
     response = client.post(
         "/workspaces",
         json={
-            "title": "Koramangala work room",
+            "title": title,
             "description": "Quiet room for hybrid workdays",
             "address_line": "12 Residency Road",
             "city": "Bengaluru",
             "state": "Karnataka",
-            "daily_price": "850.00",
+            "daily_price": daily_price,
             "amenities": {"wifi": True, "desk": True},
         },
         headers={"Authorization": f"Bearer {host_token}"},
     )
     assert response.status_code == 201
     workspace = response.json()
-    admin = register_user(client, email="admin-review@example.com", role="admin")
+    admin = register_user(client, email=admin_email, role="admin")
     review_response = client.patch(
         f"/admin/workspaces/{workspace['id']}/review",
         json={"review_status": "approved"},
@@ -306,6 +313,77 @@ def test_booking_group_payment_confirms_all_rota_days():
     assert body["total_paid"] == "1700.00"
     assert {booking["status"] for booking in body["bookings"]} == {"confirmed"}
     assert {payment["status"] for payment in body["payments"]} == {"succeeded"}
+
+    app.dependency_overrides.clear()
+
+
+def test_booking_itinerary_creates_one_group_across_multiple_workspaces():
+    app.dependency_overrides[get_session] = make_session_override()
+    client = TestClient(app)
+    host = register_user(client, email="host@example.com", role="host")
+    worker = register_user(client, email="worker@example.com")
+    first_workspace = create_workspace(
+        client,
+        host_token=host["access_token"],
+        title="Monday focus room",
+    )
+    second_workspace = create_workspace(
+        client,
+        host_token=host["access_token"],
+        title="Wednesday quiet room",
+        daily_price="650.00",
+        admin_email="admin-review-second@example.com",
+    )
+
+    response = client.post(
+        "/booking-itineraries",
+        json={
+            "rota_label": "Split office rota",
+            "items": [
+                {
+                    "workspace_id": first_workspace["id"],
+                    "slots": [
+                        {
+                            "start_at": "2026-06-15T09:00:00+05:30",
+                            "end_at": "2026-06-15T18:00:00+05:30",
+                        }
+                    ],
+                },
+                {
+                    "workspace_id": second_workspace["id"],
+                    "slots": [
+                        {
+                            "start_at": "2026-06-17T09:00:00+05:30",
+                            "end_at": "2026-06-17T18:00:00+05:30",
+                        }
+                    ],
+                },
+            ],
+        },
+        headers={"Authorization": f"Bearer {worker['access_token']}"},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    bookings = body["bookings"]
+    booking_group_id = bookings[0]["booking_group_id"]
+    assert body["total_price"] == "1500.00"
+    assert len(bookings) == 2
+    assert {booking["booking_group_id"] for booking in bookings} == {booking_group_id}
+    assert {booking["workspace_id"] for booking in bookings} == {
+        first_workspace["id"],
+        second_workspace["id"],
+    }
+
+    checkout_response = client.post(
+        f"/booking-groups/{booking_group_id}/checkout-session",
+        headers={"Authorization": f"Bearer {worker['access_token']}"},
+    )
+
+    assert checkout_response.status_code == 200
+    checkout = checkout_response.json()
+    assert checkout["total_amount"] == "1500.00"
+    assert len(checkout["payments"]) == 2
 
     app.dependency_overrides.clear()
 
@@ -1446,6 +1524,59 @@ def test_workspace_search_returns_estimated_rota_total():
     assert body[0]["daily_price"] == "850.00"
     assert body[0]["estimated_total_price"] == "2550.00"
     assert body[0]["matched_slot_count"] == 3
+
+    app.dependency_overrides.clear()
+
+
+def test_workspace_search_returns_partial_matches_with_matched_slots():
+    app.dependency_overrides[get_session] = make_session_override()
+    client = TestClient(app)
+    host = register_user(client, email="host@example.com", role="host")
+    workspace = create_workspace(client, host_token=host["access_token"])
+    availability_response = client.put(
+        f"/workspaces/{workspace['id']}/availability",
+        json={
+            "rules": [
+                {"day_of_week": 0, "start_time": "09:00", "end_time": "18:00"},
+                {"day_of_week": 2, "start_time": "09:00", "end_time": "18:00"},
+            ]
+        },
+        headers={"Authorization": f"Bearer {host['access_token']}"},
+    )
+    assert availability_response.status_code == 200
+
+    response = client.post(
+        "/workspaces/search",
+        json={
+            "city": "Bengaluru",
+            "max_daily_price": "1000.00",
+            "slots": [
+                {
+                    "start_at": "2026-06-15T09:00:00+05:30",
+                    "end_at": "2026-06-15T18:00:00+05:30",
+                },
+                {
+                    "start_at": "2026-06-16T09:00:00+05:30",
+                    "end_at": "2026-06-16T18:00:00+05:30",
+                },
+                {
+                    "start_at": "2026-06-17T09:00:00+05:30",
+                    "end_at": "2026-06-17T18:00:00+05:30",
+                },
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["id"] == workspace["id"]
+    assert body[0]["estimated_total_price"] == "1700.00"
+    assert body[0]["matched_slot_count"] == 2
+    assert [slot["start_at"][:10] for slot in body[0]["matched_slots"]] == [
+        "2026-06-15",
+        "2026-06-17",
+    ]
 
     app.dependency_overrides.clear()
 

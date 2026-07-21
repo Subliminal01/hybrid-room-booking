@@ -427,6 +427,7 @@ class WorkspaceSearchResult(BaseModel):
     daily_price: Decimal
     estimated_total_price: Decimal
     matched_slot_count: int
+    matched_slots: list[TimeSlot] = Field(default_factory=list)
     currency: str
     capacity: int
     review_status: WorkspaceReviewStatus
@@ -438,6 +439,21 @@ class BookingCreateRequest(BaseModel):
 
     workspace_id: UUID
     slots: list[TimeSlot] = Field(min_length=1)
+    rota_label: str | None = Field(default=None, max_length=120)
+    notes: str | None = None
+
+
+class ItineraryBookingItemRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_id: UUID
+    slots: list[TimeSlot] = Field(min_length=1)
+
+
+class ItineraryBookingCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[ItineraryBookingItemRequest] = Field(min_length=1)
     rota_label: str | None = Field(default=None, max_length=120)
     notes: str | None = None
 

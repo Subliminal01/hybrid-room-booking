@@ -37,6 +37,7 @@ import {
   confirmPasswordReset,
   createBookingGroupCheckoutSession,
   createBooking,
+  createBookingItinerary,
   getAdminEmailStatus,
   getAdminPaymentProviderStatus,
   getAdminStorageStatus,
@@ -68,7 +69,7 @@ import {
 } from "@/lib/api";
 
 type AuthMode = "login" | "register";
-type DashboardTab = "worker" | "host" | "admin" | "profile";
+type DashboardTab = "worker" | "host" | "admin" | "profile" | "checkout";
 
 type SlotDraft = {
   date: string;
@@ -126,12 +127,19 @@ type PendingConfirmation =
   | {
       kind: "book";
       workspace: Workspace;
+      slots: TimeSlot[];
       idempotencyKey: string;
     }
   | {
       kind: "cancel";
       booking: Booking;
     };
+
+type StayPlanItem = {
+  id: string;
+  workspace: Workspace;
+  slots: TimeSlot[];
+};
 
 type BookingGroupSummary = {
   booking_group_id: string;
@@ -421,6 +429,16 @@ function formatTime(value: string) {
   }).format(new Date(value));
 }
 
+function slotKey(slot: TimeSlot) {
+  return `${slot.start_at}|${slot.end_at}`;
+}
+
+function slotRange(slot: TimeSlot) {
+  return `${formatDate(slot.start_at)} · ${formatTime(slot.start_at)} to ${formatDate(
+    slot.end_at,
+  )} ${formatTime(slot.end_at)}`;
+}
+
 function bookingDateRange(booking: Booking) {
   return `${formatDate(booking.start_at)} · ${formatTime(booking.start_at)}-${formatTime(
     booking.end_at,
@@ -526,6 +544,10 @@ function estimatedWorkspaceTotal(workspace: Workspace, selectedDays: number) {
   return workspace.estimated_total_price ?? String(Number(workspace.daily_price) * selectedDays);
 }
 
+function matchedWorkspaceSlots(workspace: Workspace, fallbackSlots: TimeSlot[]) {
+  return workspace.matched_slots?.length ? workspace.matched_slots : fallbackSlots;
+}
+
 function draftFromRules(rules: AvailabilityRule[] = []): AvailabilityDraft {
   if (rules.length === 0) {
     return { days: [0, 1, 2, 3, 4], start: "09:00", end: "18:00" };
@@ -571,6 +593,7 @@ export default function Home() {
   const [bookingNotes, setBookingNotes] = useState("");
   const [slots, setSlots] = useState<SlotDraft[]>(() => makeInitialSlots());
   const [results, setResults] = useState<Workspace[]>([]);
+  const [stayPlan, setStayPlan] = useState<StayPlanItem[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [myBookings, setMyBookings] = useState<Booking[]>([]);
   const [myBookingsTotal, setMyBookingsTotal] = useState(0);
@@ -610,6 +633,23 @@ export default function Home() {
   } | null>(null);
 
   const apiSlots = useMemo(() => slots.map(toIsoSlot), [slots]);
+  const apiSlotSignature = useMemo(() => apiSlots.map(slotKey).join("||"), [apiSlots]);
+  const stayPlanCoveredKeys = useMemo(
+    () => new Set(stayPlan.flatMap((item) => item.slots.map(slotKey))),
+    [stayPlan],
+  );
+  const uncoveredSlots = useMemo(
+    () => apiSlots.filter((slot) => !stayPlanCoveredKeys.has(slotKey(slot))),
+    [apiSlots, stayPlanCoveredKeys],
+  );
+  const stayPlanTotal = useMemo(
+    () =>
+      stayPlan.reduce(
+        (total, item) => total + Number(item.workspace.daily_price) * item.slots.length,
+        0,
+      ),
+    [stayPlan],
+  );
   const groupedMyBookings = useMemo(() => {
     const groups = new Map<string, Booking[]>();
     for (const booking of myBookings) {
@@ -631,6 +671,10 @@ export default function Home() {
   const todayInput = useMemo(() => toDateInputValue(new Date()), []);
   const isHost = session?.user.role === "host";
   const isAdmin = session?.user.role === "admin";
+
+  useEffect(() => {
+    setStayPlan([]);
+  }, [apiSlotSignature]);
 
   useEffect(() => {
     const storedSession = window.localStorage.getItem(SESSION_STORAGE_KEY);
@@ -1087,7 +1131,9 @@ export default function Home() {
       });
       setResults(response);
       setHasSearched(true);
-      setMessage(`Found ${response.length} available workspace${response.length === 1 ? "" : "s"}.`);
+      setMessage(
+        `Found ${response.length} relevant workspace${response.length === 1 ? "" : "s"}.`,
+      );
     }, "Searching rooms");
   }
 
@@ -1099,11 +1145,12 @@ export default function Home() {
     setPendingConfirmation({
       kind: "book",
       workspace,
+      slots: matchedWorkspaceSlots(workspace, apiSlots),
       idempotencyKey: makeBookingIdempotencyKey(),
     });
   }
 
-  async function confirmBook(workspace: Workspace, idempotencyKey: string) {
+  async function confirmBook(workspace: Workspace, matchedSlots: TimeSlot[], idempotencyKey: string) {
     if (!session) {
       setError("Sign in before booking.");
       return;
@@ -1112,7 +1159,7 @@ export default function Home() {
     await runAction(async () => {
       await createBooking(session.access_token, {
         workspace_id: workspace.id,
-        slots: apiSlots,
+        slots: matchedSlots,
         rota_label: rotaLabel.trim() || `${city} office rota`,
         notes: bookingNotes.trim() || undefined,
       }, {
@@ -1124,14 +1171,104 @@ export default function Home() {
     }, "Reserving booking");
   }
 
-  async function handlePayBooking(booking: Booking) {
+  function availableSlotsForPlan(workspace: Workspace) {
+    return matchedWorkspaceSlots(workspace, apiSlots).filter(
+      (slot) => !stayPlanCoveredKeys.has(slotKey(slot)),
+    );
+  }
+
+  function addWorkspaceToStayPlan(workspace: Workspace) {
+    if (!session) {
+      setError("Sign in before adding stays to checkout.");
+      return;
+    }
+    const planSlots = availableSlotsForPlan(workspace);
+    if (planSlots.length === 0) {
+      setError("Those selected stays are already covered in your plan.");
+      return;
+    }
+    setStayPlan((current) => {
+      const existing = current.find((item) => item.workspace.id === workspace.id);
+      if (existing) {
+        return current.map((item) =>
+          item.workspace.id === workspace.id
+            ? { ...item, slots: [...item.slots, ...planSlots] }
+            : item,
+        );
+      }
+      return [
+        ...current,
+        {
+          id: `${workspace.id}-${Date.now()}`,
+          workspace,
+          slots: planSlots,
+        },
+      ];
+    });
+    setError(null);
+    setMessage(
+      `Added ${planSlots.length} stay${planSlots.length === 1 ? "" : "s"} from ${
+        workspace.title
+      } to checkout.`,
+    );
+  }
+
+  function removeStayPlanItem(itemId: string) {
+    setStayPlan((current) => current.filter((item) => item.id !== itemId));
+  }
+
+  async function handleCheckoutPlan() {
+    if (!session) {
+      setError("Sign in before checkout.");
+      return;
+    }
+    if (stayPlan.length === 0) {
+      setError("Add at least one stay before checkout.");
+      return;
+    }
+    if (uncoveredSlots.length > 0) {
+      setError("Cover every selected stay before checkout.");
+      return;
+    }
+
+    let bookingGroupId: string | null = null;
+    await runAction(async () => {
+      const created = await createBookingItinerary(
+        session.access_token,
+        {
+          items: stayPlan.map((item) => ({
+            workspace_id: item.workspace.id,
+            slots: item.slots,
+          })),
+          rota_label: rotaLabel.trim() || `${city} office rota`,
+          notes: bookingNotes.trim() || undefined,
+        },
+        {
+          idempotencyKey: makeBookingIdempotencyKey(),
+        },
+      );
+      bookingGroupId = created.bookings[0]?.booking_group_id ?? null;
+      if (!bookingGroupId) {
+        throw new Error("Checkout did not return a booking group.");
+      }
+      setStayPlan([]);
+      await refreshBookings(session.access_token);
+      setActiveTab("worker");
+    }, "Reserving stay plan");
+
+    if (bookingGroupId) {
+      await startBookingGroupPayment(bookingGroupId);
+    }
+  }
+
+  async function startBookingGroupPayment(bookingGroupId: string) {
     if (!session) {
       return;
     }
     await runAction(async () => {
       const checkoutSession = await createBookingGroupCheckoutSession(
         session.access_token,
-        booking.booking_group_id,
+        bookingGroupId,
       );
       if (checkoutSession.provider === "razorpay") {
         const payload = checkoutSession.checkout_payload;
@@ -1180,7 +1317,7 @@ export default function Home() {
       }
       const checkout = await confirmBookingGroupPayment(
         session.access_token,
-        booking.booking_group_id,
+        bookingGroupId,
       );
       await refreshBookings(session.access_token);
       setMessage(
@@ -1192,6 +1329,10 @@ export default function Home() {
         } via ${checkoutSession.provider} checkout ${checkoutSession.checkout_reference.slice(0, 17)}.`,
       );
     }, "Starting payment");
+  }
+
+  async function handlePayBooking(booking: Booking) {
+    await startBookingGroupPayment(booking.booking_group_id);
   }
 
   async function refreshBookings(token = session?.access_token) {
@@ -1890,8 +2031,8 @@ export default function Home() {
       return "";
     }
     if (pendingConfirmation.kind === "book") {
-      const { workspace } = pendingConfirmation;
-      return `Book ${workspace.title} for ${selectedDays} selected day${
+      const { workspace, slots: matchedSlots } = pendingConfirmation;
+      return `Book ${workspace.title} for ${matchedSlots.length} of ${selectedDays} selected stay${
         selectedDays === 1 ? "" : "s"
       } at an estimated total of ${formatMoney(
         estimatedWorkspaceTotal(workspace, selectedDays),
@@ -2067,6 +2208,95 @@ export default function Home() {
               </form>
             </div>
           </section>
+          ) : null}
+
+          {activeTab === "worker" ? (
+            <section className="panel">
+              <div className="panel-header">
+                <div>
+                  <h2>Stay Plan</h2>
+                  <div className="muted">
+                    {stayPlanCoveredKeys.size} of {selectedDays} selected stay
+                    {selectedDays === 1 ? "" : "s"} covered
+                  </div>
+                </div>
+                <Wallet size={18} />
+              </div>
+              <div className="panel-body">
+                {stayPlan.length === 0 ? (
+                  <div className="empty-state">
+                    <strong>No stays added yet.</strong>
+                    <p>Add matching rooms below, then review everything together at checkout.</p>
+                  </div>
+                ) : (
+                  <div className="booking-list">
+                    {stayPlan.map((item) => (
+                      <div className="booking-row" key={item.id}>
+                        <div className="workspace-thumb" aria-hidden="true">
+                          {item.workspace.photo_url ? (
+                            <img alt="" src={item.workspace.photo_url} />
+                          ) : (
+                            <span>{workspaceInitials(item.workspace.title)}</span>
+                          )}
+                        </div>
+                        <div>
+                          <strong>{item.workspace.title}</strong>
+                          <div className="muted">
+                            {item.slots.length} stay{item.slots.length === 1 ? "" : "s"} ·{" "}
+                            {formatMoney(
+                              String(Number(item.workspace.daily_price) * item.slots.length),
+                              item.workspace.currency,
+                            )}
+                          </div>
+                          <div className="muted">
+                            {item.slots.map((slot) => formatDate(slot.start_at)).join(", ")}
+                          </div>
+                        </div>
+                        <button
+                          className="btn secondary"
+                          type="button"
+                          onClick={() => removeStayPlanItem(item.id)}
+                          disabled={busy}
+                        >
+                          <Trash2 size={16} />
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {uncoveredSlots.length > 0 ? (
+                  <div className="muted">
+                    Still needed: {uncoveredSlots.map((slot) => formatDate(slot.start_at)).join(", ")}
+                  </div>
+                ) : stayPlan.length > 0 ? (
+                  <div className="notice" role="status">
+                    ROTA covered. Estimated total: {formatMoney(String(stayPlanTotal))}
+                  </div>
+                ) : null}
+
+                <div className="button-row">
+                  <button
+                    className="btn"
+                    type="button"
+                    onClick={() => setActiveTab("checkout")}
+                    disabled={!session || busy || stayPlan.length === 0}
+                  >
+                    <Wallet size={16} />
+                    Review checkout
+                  </button>
+                  <button
+                    className="btn secondary"
+                    type="button"
+                    onClick={() => setStayPlan([])}
+                    disabled={busy || stayPlan.length === 0}
+                  >
+                    Clear plan
+                  </button>
+                </div>
+              </div>
+            </section>
           ) : null}
 
           {activeTab === "worker" ? (
@@ -2312,6 +2542,99 @@ export default function Home() {
             <div className="error" role="alert">
               {error}
             </div>
+          ) : null}
+
+          {activeTab === "checkout" && session ? (
+            <section className="panel">
+              <div className="panel-header">
+                <div>
+                  <h2>Checkout</h2>
+                  <div className="muted">
+                    Review {stayPlan.length} place{stayPlan.length === 1 ? "" : "s"} covering{" "}
+                    {stayPlanCoveredKeys.size} of {selectedDays} selected stay
+                    {selectedDays === 1 ? "" : "s"}
+                  </div>
+                </div>
+                <Wallet size={18} />
+              </div>
+              <div className="panel-body">
+                {stayPlan.length === 0 ? (
+                  <div className="empty-state">
+                    <strong>Your stay plan is empty.</strong>
+                    <p>Add stays from search results before checkout.</p>
+                  </div>
+                ) : (
+                  <div className="booking-list">
+                    {stayPlan.map((item) => (
+                      <div className="booking-row" key={item.id}>
+                        <div className="workspace-thumb" aria-hidden="true">
+                          {item.workspace.photo_url ? (
+                            <img alt="" src={item.workspace.photo_url} />
+                          ) : (
+                            <span>{workspaceInitials(item.workspace.title)}</span>
+                          )}
+                        </div>
+                        <div>
+                          <strong>{item.workspace.title}</strong>
+                          <div className="muted">
+                            {item.workspace.city} · {item.slots.length} stay
+                            {item.slots.length === 1 ? "" : "s"} ·{" "}
+                            {formatMoney(
+                              String(Number(item.workspace.daily_price) * item.slots.length),
+                              item.workspace.currency,
+                            )}
+                          </div>
+                          {item.slots.map((slot) => (
+                            <div className="muted" key={slotKey(slot)}>
+                              {slotRange(slot)}
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          className="btn secondary"
+                          type="button"
+                          onClick={() => removeStayPlanItem(item.id)}
+                          disabled={busy}
+                        >
+                          <Trash2 size={16} />
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {uncoveredSlots.length > 0 ? (
+                  <div className="error" role="status">
+                    Still uncovered: {uncoveredSlots.map(slotRange).join("; ")}
+                  </div>
+                ) : stayPlan.length > 0 ? (
+                  <div className="notice" role="status">
+                    Every selected stay is covered. Total due now: {formatMoney(String(stayPlanTotal))}
+                  </div>
+                ) : null}
+
+                <div className="button-row">
+                  <button
+                    className="btn secondary"
+                    type="button"
+                    onClick={() => setActiveTab("worker")}
+                    disabled={busy}
+                  >
+                    Back to search
+                  </button>
+                  <button
+                    className="btn"
+                    type="button"
+                    onClick={() => void handleCheckoutPlan()}
+                    disabled={busy || stayPlan.length === 0 || uncoveredSlots.length > 0}
+                  >
+                    <Wallet size={16} />
+                    Reserve and pay
+                  </button>
+                </div>
+              </div>
+            </section>
           ) : null}
 
           {activeTab === "profile" && session ? (
@@ -3353,7 +3676,10 @@ export default function Home() {
                 </div>
               ) : (
                 <div className="results-grid">
-                  {results.map((workspace) => (
+                  {results.map((workspace) => {
+                    const matchedSlots = matchedWorkspaceSlots(workspace, apiSlots);
+                    const addableSlots = availableSlotsForPlan(workspace);
+                    return (
                     <article className="workspace-card" key={workspace.id}>
                       <div className="workspace-photo">
                         {workspace.photo_url ? (
@@ -3389,21 +3715,33 @@ export default function Home() {
                             estimatedWorkspaceTotal(workspace, selectedDays),
                             workspace.currency,
                           )}
-                          {" "}for {workspace.matched_slot_count ?? selectedDays} day
-                          {(workspace.matched_slot_count ?? selectedDays) === 1 ? "" : "s"}
+                          {" "}for {matchedSlots.length} of {selectedDays} selected stay
+                          {selectedDays === 1 ? "" : "s"}
                         </div>
+                        <div className="muted">
+                          {matchedSlots.length === selectedDays
+                            ? "Covers every selected stay."
+                            : "Partial match: add the covered dates here and choose another place for the rest."}
+                        </div>
+                        {addableSlots.length < matchedSlots.length ? (
+                          <div className="muted">
+                            {matchedSlots.length - addableSlots.length} matched stay
+                            {matchedSlots.length - addableSlots.length === 1 ? "" : "s"} already in plan.
+                          </div>
+                        ) : null}
                       </div>
                       <button
                         className="btn"
                         type="button"
-                        onClick={() => handleBook(workspace)}
-                        disabled={busy || !session}
+                        onClick={() => addWorkspaceToStayPlan(workspace)}
+                        disabled={busy || !session || addableSlots.length === 0}
                       >
                         <CalendarPlus size={16} />
-                        Book rota
+                        {addableSlots.length === 0 ? "Added" : "Add to plan"}
                       </button>
                     </article>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -3856,6 +4194,7 @@ export default function Home() {
                   pendingConfirmation.kind === "book"
                     ? confirmBook(
                         pendingConfirmation.workspace,
+                        pendingConfirmation.slots,
                         pendingConfirmation.idempotencyKey,
                       )
                     : confirmCancel(pendingConfirmation.booking)

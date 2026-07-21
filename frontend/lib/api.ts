@@ -67,6 +67,7 @@ export type Workspace = {
   daily_price: string;
   estimated_total_price?: string;
   matched_slot_count?: number;
+  matched_slots?: TimeSlot[];
   currency: string;
   capacity: number;
   status?: WorkspaceStatus;
@@ -535,6 +536,25 @@ export function createBooking(token: string, payload: {
     ? { "Idempotency-Key": options.idempotencyKey }
     : undefined;
   return apiRequest<BookingCreateResponse>("/bookings", {
+    token,
+    method: "POST",
+    headers,
+    body: payload,
+  });
+}
+
+export function createBookingItinerary(token: string, payload: {
+  items: Array<{
+    workspace_id: string;
+    slots: TimeSlot[];
+  }>;
+  rota_label?: string;
+  notes?: string;
+}, options: { idempotencyKey?: string } = {}) {
+  const headers = options.idempotencyKey
+    ? { "Idempotency-Key": options.idempotencyKey }
+    : undefined;
+  return apiRequest<BookingCreateResponse>("/booking-itineraries", {
     token,
     method: "POST",
     headers,

@@ -157,6 +157,50 @@ def find_available_workspaces(
     ]
 
 
+def matching_slots_for_workspace(
+    session: Session,
+    workspace: Workspace,
+    slots: list[TimeSlot],
+) -> list[TimeSlot]:
+    return [
+        slot
+        for slot in slots
+        if workspace_is_available_for_slots(session, workspace, [slot])
+        and not workspace_has_blackout_for_slots(session, workspace, [slot])
+        and not workspace_has_conflict(session, workspace.id, [slot])
+    ]
+
+
+def find_workspace_slot_matches(
+    session: Session,
+    *,
+    slots: list[TimeSlot],
+    city: str | None = None,
+    min_daily_price: Decimal | None = None,
+    max_daily_price: Decimal | None = None,
+) -> list[tuple[Workspace, list[TimeSlot]]]:
+    expire_stale_pending_bookings(session)
+    query = select(Workspace).where(
+        Workspace.status == WorkspaceStatus.ACTIVE,
+        Workspace.review_status == WorkspaceReviewStatus.APPROVED,
+    )
+
+    if city:
+        query = query.where(Workspace.city.ilike(f"%{city}%"))
+    if min_daily_price is not None:
+        query = query.where(Workspace.daily_price >= min_daily_price)
+    if max_daily_price is not None:
+        query = query.where(Workspace.daily_price <= max_daily_price)
+
+    candidates = session.exec(query.order_by(Workspace.daily_price)).all()
+    matches = [
+        (workspace, matched_slots)
+        for workspace in candidates
+        if (matched_slots := matching_slots_for_workspace(session, workspace, slots))
+    ]
+    return sorted(matches, key=lambda match: (-len(match[1]), match[0].daily_price))
+
+
 def calculate_booking_total(workspace: Workspace, slots: list[TimeSlot]) -> Decimal:
     return workspace.daily_price * len(slots)
 
@@ -168,12 +212,13 @@ def build_booking_rows(
     slots: list[TimeSlot],
     rota_label: str | None = None,
     notes: str | None = None,
+    booking_group_id: UUID | None = None,
 ) -> list[Booking]:
     expires_at = utc_now() + timedelta(minutes=settings.booking_hold_minutes)
-    booking_group_id = uuid4()
+    group_id = booking_group_id or uuid4()
     return [
         Booking(
-            booking_group_id=booking_group_id,
+            booking_group_id=group_id,
             user_id=user_id,
             workspace_id=workspace.id,
             start_at=slot.start_at,
