@@ -396,7 +396,7 @@ a:hover {
 
 .slot-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   align-items: end;
   border: 1px solid var(--line);
@@ -406,6 +406,10 @@ a:hover {
 }
 
 .slot-row > .grid-2 {
+  grid-column: 1 / -1;
+}
+
+.slot-row > .remove-slot-button {
   grid-column: 1 / -1;
 }
 

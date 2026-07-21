@@ -44,6 +44,10 @@ def slot(day: int, start_hour: int = 9, end_hour: int = 18) -> TimeSlot:
     return TimeSlot(start_at=dt(day, start_hour), end_at=dt(day, end_hour))
 
 
+def overnight_slot(day: int, start_hour: int = 10, end_hour: int = 9) -> TimeSlot:
+    return TimeSlot(start_at=dt(day, start_hour), end_at=dt(day + 1, end_hour))
+
+
 def create_user(session: Session, email: str = "worker@example.com") -> User:
     user = User(
         email=email,
@@ -225,6 +229,20 @@ def test_search_excludes_workspace_when_requested_time_is_outside_rule(session: 
     assert results == []
 
 
+def test_search_allows_overnight_stay_when_checkin_matches_rule(session: Session):
+    workspace = create_workspace(session)
+    add_availability_rule(session, workspace=workspace, day_of_week=0, start_hour=9, end_hour=18)
+
+    results = find_available_workspaces(
+        session,
+        city="Bengaluru",
+        max_daily_price=Decimal("1000.00"),
+        slots=[overnight_slot(15, 10, 9)],
+    )
+
+    assert [result.id for result in results] == [workspace.id]
+
+
 def test_search_excludes_workspace_on_blackout_date(session: Session):
     workspace = create_workspace(session)
     add_availability_rule(session, workspace=workspace, day_of_week=0)
@@ -235,6 +253,21 @@ def test_search_excludes_workspace_on_blackout_date(session: Session):
         city="Bengaluru",
         max_daily_price=Decimal("1000.00"),
         slots=[slot(15, 9, 18)],
+    )
+
+    assert results == []
+
+
+def test_search_excludes_overnight_stay_when_checkout_date_is_blacked_out(session: Session):
+    workspace = create_workspace(session)
+    add_availability_rule(session, workspace=workspace, day_of_week=0, start_hour=9, end_hour=18)
+    add_blackout_date(session, workspace=workspace, blackout_date=date(2026, 6, 16))
+
+    results = find_available_workspaces(
+        session,
+        city="Bengaluru",
+        max_daily_price=Decimal("1000.00"),
+        slots=[overnight_slot(15, 10, 9)],
     )
 
     assert results == []

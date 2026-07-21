@@ -71,11 +71,15 @@ def workspace_has_conflict(
 
 
 def slot_fits_availability_rule(slot: TimeSlot, rule: WorkspaceAvailabilityRule) -> bool:
-    if slot.start_at.date() != slot.end_at.date():
-        return False
-
     start_time = slot.start_at.timetz().replace(tzinfo=None)
     end_time = slot.end_at.timetz().replace(tzinfo=None)
+    if slot.start_at.date() != slot.end_at.date():
+        return (
+            slot.start_at.weekday() == rule.day_of_week
+            and start_time >= rule.start_time
+            and start_time <= rule.end_time
+        )
+
     return (
         slot.start_at.weekday() == rule.day_of_week
         and start_time >= rule.start_time
@@ -105,7 +109,14 @@ def workspace_has_blackout_for_slots(
     workspace: Workspace,
     slots: list[TimeSlot],
 ) -> bool:
-    requested_dates = {slot.start_at.date() for slot in slots}
+    requested_dates = set()
+    for slot in slots:
+        cursor = slot.start_at.date()
+        last_occupied_date = (slot.end_at - timedelta(microseconds=1)).date()
+        while cursor <= last_occupied_date:
+            requested_dates.add(cursor)
+            cursor += timedelta(days=1)
+
     blackout_count = session.exec(
         select(func.count(WorkspaceBlackoutDate.id)).where(
             WorkspaceBlackoutDate.workspace_id == workspace.id,

@@ -73,6 +73,8 @@ type DashboardTab = "worker" | "host" | "admin";
 type SlotDraft = {
   date: string;
   dateText: string;
+  checkoutDate: string;
+  checkoutDateText: string;
   start: string;
   end: string;
 };
@@ -373,6 +375,8 @@ function makeSlotsFromDates(dates: string[]): SlotDraft[] {
   return dates.map((date) => ({
     date,
     dateText: toDisplayDate(date),
+    checkoutDate: date,
+    checkoutDateText: toDisplayDate(date),
     start: DEFAULT_START_TIME,
     end: DEFAULT_END_TIME,
   }));
@@ -385,7 +389,7 @@ function makeInitialSlots() {
 function toIsoSlot(slot: SlotDraft): TimeSlot {
   return {
     start_at: `${slot.date}T${slot.start}:00+05:30`,
-    end_at: `${slot.date}T${slot.end}:00+05:30`,
+    end_at: `${slot.checkoutDate}T${slot.end}:00+05:30`,
   };
 }
 
@@ -599,7 +603,11 @@ export default function Home() {
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const pendingDateCursor = useRef<{ index: number; position: number } | null>(null);
+  const pendingDateCursor = useRef<{
+    field: "checkin" | "checkout";
+    index: number;
+    position: number;
+  } | null>(null);
 
   const apiSlots = useMemo(() => slots.map(toIsoSlot), [slots]);
   const groupedMyBookings = useMemo(() => {
@@ -698,7 +706,11 @@ export default function Home() {
       return;
     }
     pendingDateCursor.current = null;
-    const input = document.getElementById(`date-${cursor.index}`) as HTMLInputElement | null;
+    const inputId =
+      cursor.field === "checkin"
+        ? `date-${cursor.index}`
+        : `checkout-date-${cursor.index}`;
+    const input = document.getElementById(inputId) as HTMLInputElement | null;
     input?.setSelectionRange(cursor.position, cursor.position);
   }, [slots]);
 
@@ -1615,10 +1627,16 @@ export default function Home() {
     );
   }
 
-  function updateSlotDateText(index: number, value: string, cursorPosition: number | null) {
+  function updateSlotDateText(
+    index: number,
+    field: "checkin" | "checkout",
+    value: string,
+    cursorPosition: number | null,
+  ) {
     const dateText = formatTypedDisplayDate(value);
     if (cursorPosition !== null) {
       pendingDateCursor.current = {
+        field,
         index,
         position: cursorPositionForDigitCount(
           dateText,
@@ -1627,21 +1645,41 @@ export default function Home() {
       };
     }
     const parsedDate = displayDateToIso(dateText);
-    updateSlot(index, {
-      dateText,
-      ...(parsedDate ? { date: parsedDate } : {}),
-    });
+    updateSlot(
+      index,
+      field === "checkin"
+        ? {
+            dateText,
+            ...(parsedDate ? { date: parsedDate } : {}),
+          }
+        : {
+            checkoutDateText: dateText,
+            ...(parsedDate ? { checkoutDate: parsedDate } : {}),
+          },
+    );
   }
 
-  function updateSlotDateFromPicker(index: number, value: string) {
-    updateSlot(index, {
-      date: value,
-      dateText: toDisplayDate(value),
-    });
+  function updateSlotDateFromPicker(index: number, field: "checkin" | "checkout", value: string) {
+    updateSlot(
+      index,
+      field === "checkin"
+        ? {
+            date: value,
+            dateText: toDisplayDate(value),
+          }
+        : {
+            checkoutDate: value,
+            checkoutDateText: toDisplayDate(value),
+          },
+    );
   }
 
-  function openDatePicker(index: number) {
-    const picker = document.getElementById(`date-picker-${index}`) as HTMLInputElement | null;
+  function openDatePicker(index: number, field: "checkin" | "checkout" = "checkin") {
+    const pickerId =
+      field === "checkin"
+        ? `date-picker-${index}`
+        : `checkout-date-picker-${index}`;
+    const picker = document.getElementById(pickerId) as HTMLInputElement | null;
     if (!picker) {
       return;
     }
@@ -1670,6 +1708,8 @@ export default function Home() {
         {
           date: toDateInputValue(candidate),
           dateText: toDisplayDate(toDateInputValue(candidate)),
+          checkoutDate: toDateInputValue(candidate),
+          checkoutDateText: toDisplayDate(toDateInputValue(candidate)),
           start: current[current.length - 1]?.start ?? DEFAULT_START_TIME,
           end: current[current.length - 1]?.end ?? DEFAULT_END_TIME,
         },
@@ -1807,19 +1847,30 @@ export default function Home() {
     }
     for (const slot of slots) {
       const parsedDate = displayDateToIso(slot.dateText);
-      if (!slot.dateText || !parsedDate || !slot.start || !slot.end) {
-        return "Each rota day needs a date, start time, and end time.";
+      const parsedCheckoutDate = displayDateToIso(slot.checkoutDateText);
+      if (
+        !slot.dateText ||
+        !parsedDate ||
+        !slot.checkoutDateText ||
+        !parsedCheckoutDate ||
+        !slot.start ||
+        !slot.end
+      ) {
+        return "Each stay needs check-in date, check-out date, start time, and end time.";
       }
       if (parsedDate < todayInput) {
-        return "Rota dates cannot be in the past.";
+        return "Check-in dates cannot be in the past.";
+      }
+      if (parsedCheckoutDate < parsedDate) {
+        return "Check-out date cannot be before check-in date.";
       }
       const start = new Date(`${slot.date}T${slot.start}:00+05:30`);
-      const end = new Date(`${slot.date}T${slot.end}:00+05:30`);
+      const end = new Date(`${slot.checkoutDate}T${slot.end}:00+05:30`);
       if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-        return "One of the selected rota days is invalid.";
+        return "One of the selected stays is invalid.";
       }
       if (end <= start) {
-        return "End time must be after start time for every rota day.";
+        return "Check-out must be after check-in for every stay.";
       }
     }
     return null;
@@ -2202,7 +2253,7 @@ export default function Home() {
               {slots.map((slot, index) => (
                 <div className="slot-row" key={`${slot.date}-${index}`}>
                   <div className="field">
-                    <label htmlFor={`date-${index}`}>Date</label>
+                    <label htmlFor={`date-${index}`}>Check-in date</label>
                     <div className="date-entry">
                       <input
                         id={`date-${index}`}
@@ -2212,16 +2263,17 @@ export default function Home() {
                         onChange={(event) =>
                           updateSlotDateText(
                             index,
+                            "checkin",
                             event.currentTarget.value,
                             event.currentTarget.selectionStart,
                           )
                         }
                       />
                       <button
-                        aria-label={`Open date picker for rota day ${index + 1}`}
+                        aria-label={`Open check-in date picker for stay ${index + 1}`}
                         className="date-picker-button"
                         type="button"
-                        onClick={() => openDatePicker(index)}
+                        onClick={() => openDatePicker(index, "checkin")}
                       >
                         <CalendarPlus size={16} />
                       </button>
@@ -2234,14 +2286,53 @@ export default function Home() {
                         min={todayInput}
                         value={slot.date}
                         onChange={(event) =>
-                          updateSlotDateFromPicker(index, event.target.value)
+                          updateSlotDateFromPicker(index, "checkin", event.target.value)
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`checkout-date-${index}`}>Check-out date</label>
+                    <div className="date-entry">
+                      <input
+                        id={`checkout-date-${index}`}
+                        inputMode="numeric"
+                        placeholder="MM/DD/YYYY"
+                        value={slot.checkoutDateText}
+                        onChange={(event) =>
+                          updateSlotDateText(
+                            index,
+                            "checkout",
+                            event.currentTarget.value,
+                            event.currentTarget.selectionStart,
+                          )
+                        }
+                      />
+                      <button
+                        aria-label={`Open check-out date picker for stay ${index + 1}`}
+                        className="date-picker-button"
+                        type="button"
+                        onClick={() => openDatePicker(index, "checkout")}
+                      >
+                        <CalendarPlus size={16} />
+                      </button>
+                      <input
+                        aria-hidden="true"
+                        className="native-date-input"
+                        id={`checkout-date-picker-${index}`}
+                        tabIndex={-1}
+                        type="date"
+                        min={slot.date || todayInput}
+                        value={slot.checkoutDate}
+                        onChange={(event) =>
+                          updateSlotDateFromPicker(index, "checkout", event.target.value)
                         }
                       />
                     </div>
                   </div>
                   <div className="grid-2">
                     <div className="field">
-                      <label htmlFor={`start-${index}`}>Start</label>
+                      <label htmlFor={`start-${index}`}>Check-in time</label>
                       <input
                         id={`start-${index}`}
                         type="time"
@@ -2250,7 +2341,7 @@ export default function Home() {
                       />
                     </div>
                     <div className="field">
-                      <label htmlFor={`end-${index}`}>End</label>
+                      <label htmlFor={`end-${index}`}>Check-out time</label>
                       <input
                         id={`end-${index}`}
                         type="time"
@@ -2260,11 +2351,11 @@ export default function Home() {
                     </div>
                   </div>
                   <button
-                    aria-label={`Remove rota day ${index + 1}`}
+                    aria-label={`Remove stay ${index + 1}`}
                     className="remove-slot-button"
                     type="button"
                     onClick={() => removeSlot(index)}
-                    title="Remove day"
+                    title="Remove stay"
                   >
                     <Trash2 size={16} />
                     <span>Remove</span>
