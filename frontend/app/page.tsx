@@ -2321,7 +2321,14 @@ export default function Home() {
                   <h2>Profile</h2>
                   <div className="muted">{session.user.email}</div>
                 </div>
-                <LogIn size={18} />
+                <button
+                  className="btn secondary"
+                  type="button"
+                  onClick={() => setActiveTab(dashboardForRole(session.user.role))}
+                  disabled={busy}
+                >
+                  Back to dashboard
+                </button>
               </div>
               <div className="panel-body">
                 <div className="profile-summary">
