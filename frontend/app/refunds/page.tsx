@@ -11,7 +11,7 @@ export default function RefundPolicyPage() {
       <section className="legal-document">
         <Link className="legal-back-link" href="/">Back to booking</Link>
         <h1>Cancellation and Refund Policy</h1>
-        <p className="muted">Last updated: July 5, 2026</p>
+        <p className="muted">Last updated: July 21, 2026</p>
 
         <h2>Pending Bookings</h2>
         <p>
@@ -30,9 +30,11 @@ export default function RefundPolicyPage() {
 
         <h2>Current Pilot Policy</h2>
         <p>
-          During pilot testing, cancellations made before the booked day are intended
-          to be refundable where payment provider settlement rules allow it. Same-day
-          cancellations, no-shows, misuse, or overstays may be non-refundable.
+          During pilot testing, confirmed bookings cancelled more than 24 hours
+          before check-in are eligible for a full refund where payment provider
+          settlement rules allow it. Cancellations within 24 hours of check-in,
+          no-shows, misuse, or overstays may be non-refundable. Stays that have
+          already started cannot be cancelled through self-service.
         </p>
 
         <h2>Refund Processing</h2>

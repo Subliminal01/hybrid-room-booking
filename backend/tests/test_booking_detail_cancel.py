@@ -94,8 +94,8 @@ def booking_payload(workspace_id: str, day: int = 15) -> dict:
         "workspace_id": workspace_id,
         "slots": [
             {
-                "start_at": f"2026-06-{day:02d}T09:00:00+05:30",
-                "end_at": f"2026-06-{day:02d}T18:00:00+05:30",
+                "start_at": f"2026-08-{day:02d}T09:00:00+05:30",
+                "end_at": f"2026-08-{day:02d}T18:00:00+05:30",
             }
         ],
     }

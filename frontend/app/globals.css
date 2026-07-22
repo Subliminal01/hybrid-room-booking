@@ -711,6 +711,34 @@ a:hover {
   line-height: 1.5;
 }
 
+.policy-note.strong {
+  border-color: #e7b66a;
+  color: #7a4200;
+  font-weight: 700;
+}
+
+.coverage-meter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.coverage-track {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8efec;
+}
+
+.coverage-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 180ms ease;
+}
+
 .receipt-totals {
   display: grid;
   gap: 4px;

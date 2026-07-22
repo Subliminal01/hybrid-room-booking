@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+from datetime import datetime, timezone
 
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
@@ -246,7 +247,19 @@ def test_booking_payment_flow_confirms_pending_booking():
     workspace = create_workspace(client, host_token=host["access_token"])
     booking_response = client.post(
         "/bookings",
-        json=booking_payload(workspace["id"]),
+        json=booking_payload(
+            workspace["id"],
+            slots=[
+                {
+                    "start_at": "2026-08-24T09:00:00+05:30",
+                    "end_at": "2026-08-24T18:00:00+05:30",
+                },
+                {
+                    "start_at": "2026-08-26T09:00:00+05:30",
+                    "end_at": "2026-08-26T18:00:00+05:30",
+                },
+            ],
+        ),
         headers={"Authorization": f"Bearer {worker['access_token']}"},
     )
     booking = booking_response.json()["bookings"][0]
@@ -758,8 +771,8 @@ def test_payment_webhook_confirms_signed_payment_success():
             workspace["id"],
             slots=[
                 {
-                    "start_at": "2026-06-20T09:00:00+05:30",
-                    "end_at": "2026-06-20T18:00:00+05:30",
+                    "start_at": "2026-08-20T09:00:00+05:30",
+                    "end_at": "2026-08-20T18:00:00+05:30",
                 },
             ],
         ),
@@ -1303,8 +1316,8 @@ def test_cancel_paid_booking_refunds_payment_and_updates_revenue():
             workspace["id"],
             slots=[
                 {
-                    "start_at": "2026-06-20T09:00:00+05:30",
-                    "end_at": "2026-06-20T18:00:00+05:30",
+                    "start_at": "2026-08-20T09:00:00+05:30",
+                    "end_at": "2026-08-20T18:00:00+05:30",
                 },
             ],
         ),
@@ -1355,7 +1368,19 @@ def test_booking_group_cancel_refunds_all_paid_rota_days():
     workspace = create_workspace(client, host_token=host["access_token"])
     booking_response = client.post(
         "/bookings",
-        json=booking_payload(workspace["id"]),
+        json=booking_payload(
+            workspace["id"],
+            slots=[
+                {
+                    "start_at": "2026-08-24T09:00:00+05:30",
+                    "end_at": "2026-08-24T18:00:00+05:30",
+                },
+                {
+                    "start_at": "2026-08-26T09:00:00+05:30",
+                    "end_at": "2026-08-26T18:00:00+05:30",
+                },
+            ],
+        ),
         headers={"Authorization": f"Bearer {worker['access_token']}"},
     )
     booking_group_id = booking_response.json()["bookings"][0]["booking_group_id"]
@@ -1393,6 +1418,93 @@ def test_booking_group_cancel_refunds_all_paid_rota_days():
     assert revenue["gross_revenue"] == "0.00"
     assert revenue["pending_payout"] == "0.00"
     assert revenue["cancelled_booking_count"] == 2
+
+    app.dependency_overrides.clear()
+
+
+def test_late_booking_group_cancel_is_non_refundable(monkeypatch):
+    app.dependency_overrides[get_session] = make_session_override()
+    client = TestClient(app)
+    host = register_user(client, email="host@example.com", role="host")
+    worker = register_user(client, email="worker@example.com")
+    workspace = create_workspace(client, host_token=host["access_token"])
+    booking_response = client.post(
+        "/bookings",
+        json=booking_payload(
+            workspace["id"],
+            slots=[
+                {
+                    "start_at": "2026-08-20T09:00:00+05:30",
+                    "end_at": "2026-08-20T18:00:00+05:30",
+                },
+            ],
+        ),
+        headers={"Authorization": f"Bearer {worker['access_token']}"},
+    )
+    booking_group_id = booking_response.json()["bookings"][0]["booking_group_id"]
+    intent_response = client.post(
+        f"/booking-groups/{booking_group_id}/payment-intent",
+        headers={"Authorization": f"Bearer {worker['access_token']}"},
+    )
+    assert intent_response.status_code == 200
+    confirm_response = client.post(
+        f"/booking-groups/{booking_group_id}/payment-confirm",
+        headers={"Authorization": f"Bearer {worker['access_token']}"},
+    )
+    assert confirm_response.status_code == 200
+    monkeypatch.setattr(
+        "app.main.utc_now",
+        lambda: datetime(2026, 8, 19, 12, 0, tzinfo=timezone.utc),
+    )
+
+    cancel_response = client.patch(
+        f"/booking-groups/{booking_group_id}/cancel",
+        headers={"Authorization": f"Bearer {worker['access_token']}"},
+    )
+
+    assert cancel_response.status_code == 200
+    body = cancel_response.json()
+    assert body["total_refunded"] == "0.00"
+    assert body["refunded_payments"] == []
+    assert {booking["status"] for booking in body["bookings"]} == {"cancelled"}
+
+    app.dependency_overrides.clear()
+
+
+def test_booking_group_cancel_rejects_already_started_stay(monkeypatch):
+    app.dependency_overrides[get_session] = make_session_override()
+    client = TestClient(app)
+    host = register_user(client, email="host@example.com", role="host")
+    worker = register_user(client, email="worker@example.com")
+    workspace = create_workspace(client, host_token=host["access_token"])
+    booking_response = client.post(
+        "/bookings",
+        json=booking_payload(
+            workspace["id"],
+            slots=[
+                {
+                    "start_at": "2026-08-20T09:00:00+05:30",
+                    "end_at": "2026-08-20T18:00:00+05:30",
+                },
+            ],
+        ),
+        headers={"Authorization": f"Bearer {worker['access_token']}"},
+    )
+    booking_group_id = booking_response.json()["bookings"][0]["booking_group_id"]
+    monkeypatch.setattr(
+        "app.main.utc_now",
+        lambda: datetime(2026, 8, 20, 10, 0, tzinfo=timezone.utc),
+    )
+
+    cancel_response = client.patch(
+        f"/booking-groups/{booking_group_id}/cancel",
+        headers={"Authorization": f"Bearer {worker['access_token']}"},
+    )
+
+    assert cancel_response.status_code == 409
+    assert cancel_response.json()["detail"] == (
+        "This stay has already started and cannot be cancelled from self-service"
+    )
 
     app.dependency_overrides.clear()
 

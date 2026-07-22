@@ -460,6 +460,25 @@ function bookingGroupDateRange(bookings: Booking[]) {
   return `${formatDate(first.start_at)}-${formatDate(last.start_at)} · ${ordered.length} days`;
 }
 
+function canCancelFromSelfService(booking: Booking) {
+  return new Date(booking.start_at).getTime() > Date.now();
+}
+
+function cancellationPolicyText(booking: Booking) {
+  const startsAt = new Date(booking.start_at).getTime();
+  const hoursUntilStart = (startsAt - Date.now()) / (1000 * 60 * 60);
+  if (hoursUntilStart <= 0) {
+    return "This stay has already started, so self-service cancellation is no longer available.";
+  }
+  if (booking.status === "confirmed" && hoursUntilStart <= 24) {
+    return "Cancellation is allowed before check-in, but this is within 24 hours and may be non-refundable.";
+  }
+  if (booking.status === "confirmed") {
+    return "Cancellation is eligible for a full refund because check-in is more than 24 hours away.";
+  }
+  return "Pending holds can be cancelled before they expire.";
+}
+
 function summarizeBookingGroup(bookings: Booking[]): BookingGroupSummary | null {
   const ordered = [...bookings].sort(
     (a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime(),
@@ -479,7 +498,10 @@ function summarizeBookingGroup(bookings: Booking[]): BookingGroupSummary | null 
     ),
     status: statuses.size === 1 ? ordered[0].status : "mixed",
     payableBooking: ordered.find((booking) => booking.status === "pending") ?? null,
-    cancellableBooking: ordered.find((booking) => booking.status !== "cancelled") ?? null,
+    cancellableBooking:
+      ordered.find(
+        (booking) => booking.status !== "cancelled" && canCancelFromSelfService(booking),
+      ) ?? null,
   };
 }
 
@@ -633,6 +655,7 @@ export default function Home() {
   } | null>(null);
 
   const apiSlots = useMemo(() => slots.map(toIsoSlot), [slots]);
+  const selectedDays = slots.length;
   const apiSlotSignature = useMemo(() => apiSlots.map(slotKey).join("||"), [apiSlots]);
   const stayPlanCoveredKeys = useMemo(
     () => new Set(stayPlan.flatMap((item) => item.slots.map(slotKey))),
@@ -650,6 +673,9 @@ export default function Home() {
       ),
     [stayPlan],
   );
+  const coveragePercent = selectedDays > 0
+    ? Math.round((stayPlanCoveredKeys.size / selectedDays) * 100)
+    : 0;
   const groupedMyBookings = useMemo(() => {
     const groups = new Map<string, Booking[]>();
     for (const booking of myBookings) {
@@ -667,7 +693,6 @@ export default function Home() {
           new Date(a.firstBooking.start_at).getTime(),
       );
   }, [myBookings]);
-  const selectedDays = slots.length;
   const todayInput = useMemo(() => toDateInputValue(new Date()), []);
   const isHost = session?.user.role === "host";
   const isAdmin = session?.user.role === "admin";
@@ -1226,11 +1251,6 @@ export default function Home() {
       setError("Add at least one stay before checkout.");
       return;
     }
-    if (uncoveredSlots.length > 0) {
-      setError("Cover every selected stay before checkout.");
-      return;
-    }
-
     let bookingGroupId: string | null = null;
     await runAction(async () => {
       const created = await createBookingItinerary(
@@ -1254,6 +1274,13 @@ export default function Home() {
       setStayPlan([]);
       await refreshBookings(session.access_token);
       setActiveTab("worker");
+      if (uncoveredSlots.length > 0) {
+        setMessage(
+          `Reserved the covered stays. ${uncoveredSlots.length} selected stay${
+            uncoveredSlots.length === 1 ? " is" : "s are"
+          } still not booked.`,
+        );
+      }
     }, "Reserving stay plan");
 
     if (bookingGroupId) {
@@ -1541,14 +1568,14 @@ export default function Home() {
       const cancelled = await cancelBookingGroup(session.access_token, booking.booking_group_id);
       await refreshBookings(session.access_token);
       setSelectedBookingGroup(null);
+      const refundMessage =
+        Number(cancelled.total_refunded) > 0
+          ? ` and refunded ${formatMoney(cancelled.total_refunded)}`
+          : ". No refund was issued under the cancellation policy";
       setMessage(
         `Cancelled ${cancelled.bookings.length} rota day${
           cancelled.bookings.length === 1 ? "" : "s"
-        }${
-          Number(cancelled.total_refunded) > 0
-            ? ` and refunded ${formatMoney(cancelled.total_refunded)}`
-            : ""
-        }.`,
+        }${refundMessage}${Number(cancelled.total_refunded) > 0 ? "." : ""}`,
       );
     }, "Cancelling booking");
   }
@@ -2051,7 +2078,9 @@ export default function Home() {
     if (pendingConfirmation.kind === "book") {
       return "A room is held after booking creation. Payment must be completed before the hold expires. Confirmed bookings can be cancelled from booking history; eligible paid days are refunded through the original payment provider.";
     }
-    return "Cancelling applies to the whole rota group. Refund timing depends on the payment provider and bank processing timelines.";
+    return `Cancelling applies to the whole rota group. ${cancellationPolicyText(
+      pendingConfirmation.booking,
+    )} Refund timing depends on the payment provider and bank processing timelines.`;
   }
 
   return (
@@ -2223,6 +2252,12 @@ export default function Home() {
                 <Wallet size={18} />
               </div>
               <div className="panel-body">
+                <div className="coverage-meter" aria-label={`${coveragePercent}% of selected stays covered`}>
+                  <div className="coverage-track">
+                    <span style={{ width: `${Math.min(coveragePercent, 100)}%` }} />
+                  </div>
+                  <strong>{coveragePercent}% covered</strong>
+                </div>
                 {stayPlan.length === 0 ? (
                   <div className="empty-state">
                     <strong>No stays added yet.</strong>
@@ -2267,8 +2302,9 @@ export default function Home() {
                 )}
 
                 {uncoveredSlots.length > 0 ? (
-                  <div className="muted">
-                    Still needed: {uncoveredSlots.map((slot) => formatDate(slot.start_at)).join(", ")}
+                  <div className="policy-note">
+                    Still needed: {uncoveredSlots.map((slot) => formatDate(slot.start_at)).join(", ")}.
+                    You can keep searching, or checkout only the stays already in your plan.
                   </div>
                 ) : stayPlan.length > 0 ? (
                   <div className="notice" role="status">
@@ -2284,7 +2320,7 @@ export default function Home() {
                     disabled={!session || busy || stayPlan.length === 0}
                   >
                     <Wallet size={16} />
-                    Review checkout
+                    {uncoveredSlots.length > 0 ? "Review partial checkout" : "Review checkout"}
                   </button>
                   <button
                     className="btn secondary"
@@ -2558,6 +2594,12 @@ export default function Home() {
                 <Wallet size={18} />
               </div>
               <div className="panel-body">
+                <div className="coverage-meter" aria-label={`${coveragePercent}% of selected stays covered`}>
+                  <div className="coverage-track">
+                    <span style={{ width: `${Math.min(coveragePercent, 100)}%` }} />
+                  </div>
+                  <strong>{coveragePercent}% covered</strong>
+                </div>
                 {stayPlan.length === 0 ? (
                   <div className="empty-state">
                     <strong>Your stay plan is empty.</strong>
@@ -2605,8 +2647,9 @@ export default function Home() {
                 )}
 
                 {uncoveredSlots.length > 0 ? (
-                  <div className="error" role="status">
-                    Still uncovered: {uncoveredSlots.map(slotRange).join("; ")}
+                  <div className="policy-note strong" role="status">
+                    Not included in this checkout: {uncoveredSlots.map(slotRange).join("; ")}.
+                    You will only pay for the covered stays listed above.
                   </div>
                 ) : stayPlan.length > 0 ? (
                   <div className="notice" role="status">
@@ -2627,10 +2670,10 @@ export default function Home() {
                     className="btn"
                     type="button"
                     onClick={() => void handleCheckoutPlan()}
-                    disabled={busy || stayPlan.length === 0 || uncoveredSlots.length > 0}
+                    disabled={busy || stayPlan.length === 0}
                   >
                     <Wallet size={16} />
-                    Reserve and pay
+                    {uncoveredSlots.length > 0 ? "Reserve covered stays" : "Reserve and pay"}
                   </button>
                 </div>
               </div>
@@ -3826,6 +3869,13 @@ export default function Home() {
                           <div className="muted">
                             Pay by {formatDateTime(booking.expires_at)}
                           </div>
+                        ) : null}
+                        {group.cancellableBooking ? (
+                          <div className="muted">
+                            {cancellationPolicyText(group.cancellableBooking)}
+                          </div>
+                        ) : group.status !== "cancelled" ? (
+                          <div className="muted">Self-service cancellation is no longer available.</div>
                         ) : null}
                       </div>
                       <div>

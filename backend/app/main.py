@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+from datetime import timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, UploadFile, status
@@ -197,6 +198,32 @@ def get_visible_booking(
         )
 
     return booking
+
+
+def as_aware_utc(value):
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def booking_has_started(booking: Booking, now) -> bool:
+    return as_aware_utc(booking.start_at) <= now
+
+
+def booking_refund_allowed(booking: Booking, now) -> bool:
+    if booking.status != BookingStatus.CONFIRMED:
+        return False
+    return as_aware_utc(booking.start_at) - now > timedelta(hours=24)
+
+
+def ensure_booking_can_be_cancelled(booking: Booking, now) -> None:
+    if booking.status == BookingStatus.CANCELLED:
+        return
+    if booking_has_started(booking, now):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This stay has already started and cannot be cancelled from self-service",
+        )
 
 
 def get_owned_workspace(
@@ -2214,11 +2241,18 @@ def cancel_booking_group(
             )
 
     now = utc_now()
+    for booking in bookings:
+        ensure_booking_can_be_cancelled(booking, now)
+
     refunded_payments = []
+    non_refunded_booking_ids = []
     for booking in bookings:
         if booking.status == BookingStatus.CANCELLED:
             continue
-        refunded_payments.extend(refund_succeeded_payments_for_booking(session, booking, now))
+        if booking_refund_allowed(booking, now):
+            refunded_payments.extend(refund_succeeded_payments_for_booking(session, booking, now))
+        elif booking.status == BookingStatus.CONFIRMED:
+            non_refunded_booking_ids.append(str(booking.id))
         booking.status = BookingStatus.CANCELLED
         session.add(booking)
 
@@ -2233,6 +2267,8 @@ def cancel_booking_group(
             "booking_count": len(bookings),
             "refunded_payment_count": len(refunded_payments),
             "total_refunded": str(total_refunded),
+            "non_refunded_booking_ids": non_refunded_booking_ids,
+            "policy": "Full refund is available more than 24 hours before check-in. Later cancellations are non-refundable.",
         },
     )
     if refunded_payments:
@@ -2273,7 +2309,12 @@ def cancel_booking(
         return booking
 
     now = utc_now()
-    refunded_payments = refund_succeeded_payments_for_booking(session, booking, now)
+    ensure_booking_can_be_cancelled(booking, now)
+    refunded_payments = (
+        refund_succeeded_payments_for_booking(session, booking, now)
+        if booking_refund_allowed(booking, now)
+        else []
+    )
     total_refunded = sum((payment.amount for payment in refunded_payments), Decimal("0.00"))
 
     booking.status = BookingStatus.CANCELLED
@@ -2288,6 +2329,7 @@ def cancel_booking(
             "booking_group_id": str(booking.booking_group_id),
             "refunded_payment_count": len(refunded_payments),
             "total_refunded": str(total_refunded),
+            "policy": "Full refund is available more than 24 hours before check-in. Later cancellations are non-refundable.",
         },
     )
     if refunded_payments:
