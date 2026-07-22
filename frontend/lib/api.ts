@@ -355,14 +355,14 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}): Promis
     } catch {
       // Keep status message when backend returns no JSON body.
     }
-    throw new ApiError(
-      requestId ? `${message} (Request ID: ${requestId.slice(0, 8)})` : message,
-      {
-        status: response.status,
-        errorCode,
-        requestId,
-      },
-    );
+    if (requestId) {
+      console.warn("API request failed", { path, status: response.status, requestId });
+    }
+    throw new ApiError(message, {
+      status: response.status,
+      errorCode,
+      requestId,
+    });
   }
 
   if (response.status === 204) {
@@ -418,14 +418,14 @@ async function apiFormRequest<T>(path: string, token: string, body: FormData): P
     } catch {
       // Keep status message when backend returns no JSON body.
     }
-    throw new ApiError(
-      requestId ? `${message} (Request ID: ${requestId.slice(0, 8)})` : message,
-      {
-        status: response.status,
-        errorCode,
-        requestId,
-      },
-    );
+    if (requestId) {
+      console.warn("API form request failed", { path, status: response.status, requestId });
+    }
+    throw new ApiError(message, {
+      status: response.status,
+      errorCode,
+      requestId,
+    });
   }
 
   return response.json() as Promise<T>;
