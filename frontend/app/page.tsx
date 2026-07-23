@@ -199,6 +199,8 @@ const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const BOOKING_PAGE_SIZE = 10;
 const AUDIT_PAGE_SIZE = 12;
 const ADMIN_PAGE_SIZE = 8;
+const ACCESS_TOKEN_REFRESH_BUFFER_MS = 2 * 60 * 1000;
+const MIN_SESSION_REFRESH_DELAY_MS = 10 * 1000;
 const DEFAULT_START_TIME = "09:00";
 const DEFAULT_END_TIME = "18:00";
 const MAX_WORKSPACE_PHOTO_BYTES = 5 * 1024 * 1024;
@@ -280,6 +282,24 @@ function loadRazorpayCheckout() {
     script.onerror = () => reject(new Error("Could not load Razorpay Checkout."));
     document.body.appendChild(script);
   });
+}
+
+function base64UrlToJson(value: string) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(
+    normalized.length + ((4 - (normalized.length % 4)) % 4),
+    "=",
+  );
+  return JSON.parse(window.atob(padded)) as Record<string, unknown>;
+}
+
+function accessTokenExpiryMs(accessToken: string) {
+  try {
+    const payload = base64UrlToJson(accessToken.split(".")[1] ?? "");
+    return typeof payload.exp === "number" ? payload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
 }
 
 function toDateInputValue(date: Date) {
@@ -702,6 +722,39 @@ export default function Home() {
   }, [apiSlotSignature]);
 
   useEffect(() => {
+    if (!session?.refresh_token) {
+      return;
+    }
+
+    let cancelled = false;
+    const expiryMs = accessTokenExpiryMs(session.access_token);
+    const refreshDelay = expiryMs
+      ? Math.max(expiryMs - Date.now() - ACCESS_TOKEN_REFRESH_BUFFER_MS, MIN_SESSION_REFRESH_DELAY_MS)
+      : 10 * 60 * 1000;
+
+    const refreshTimer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const refreshed = await refreshSession(session.refresh_token);
+          if (!cancelled) {
+            persistSession(refreshed, { preserveTab: true });
+          }
+        } catch {
+          if (!cancelled) {
+            clearSessionState();
+            setError("Your session expired. Please sign in again.");
+          }
+        }
+      })();
+    }, refreshDelay);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(refreshTimer);
+    };
+  }, [session?.access_token, session?.refresh_token]);
+
+  useEffect(() => {
     const storedSession = window.localStorage.getItem(SESSION_STORAGE_KEY);
     if (!storedSession) {
       return;
@@ -901,12 +954,17 @@ export default function Home() {
     }
   }
 
-  function persistSession(nextSession: TokenResponse) {
+  function persistSession(
+    nextSession: TokenResponse,
+    options: { preserveTab?: boolean } = {},
+  ) {
     setSession(nextSession);
     setProfileName(nextSession.user.full_name);
     setProfilePhone(nextSession.user.phone_number ?? "");
     window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(nextSession));
-    setActiveTab(dashboardForRole(nextSession.user.role));
+    if (!options.preserveTab) {
+      setActiveTab(dashboardForRole(nextSession.user.role));
+    }
   }
 
   function clearSessionState() {
