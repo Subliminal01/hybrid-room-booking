@@ -70,6 +70,7 @@ import {
 
 type AuthMode = "login" | "register";
 type DashboardTab = "worker" | "host" | "admin" | "profile" | "checkout";
+type AdminPaymentStatusFilter = "all" | Payment["status"];
 
 type SlotDraft = {
   date: string;
@@ -207,6 +208,13 @@ const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const BOOKING_PAGE_SIZE = 10;
 const AUDIT_PAGE_SIZE = 12;
 const ADMIN_PAGE_SIZE = 8;
+const PAYMENT_STATUS_FILTERS: AdminPaymentStatusFilter[] = [
+  "all",
+  "pending",
+  "succeeded",
+  "failed",
+  "refunded",
+];
 const ACCESS_TOKEN_REFRESH_BUFFER_MS = 2 * 60 * 1000;
 const MIN_SESSION_REFRESH_DELAY_MS = 10 * 1000;
 const DEFAULT_START_TIME = "09:00";
@@ -735,6 +743,8 @@ export default function Home() {
   const [adminBookingsTotal, setAdminBookingsTotal] = useState(0);
   const [adminPayments, setAdminPayments] = useState<Payment[]>([]);
   const [adminPaymentsTotal, setAdminPaymentsTotal] = useState(0);
+  const [adminPaymentStatusFilter, setAdminPaymentStatusFilter] =
+    useState<AdminPaymentStatusFilter>("all");
   const [emailStatus, setEmailStatus] = useState<EmailStatus | null>(null);
   const [paymentProviderStatus, setPaymentProviderStatus] =
     useState<PaymentProviderStatus | null>(null);
@@ -1660,6 +1670,14 @@ export default function Home() {
     setAuditEventsTotal(page.total);
   }
 
+  function adminPaymentListParams(offset = 0) {
+    return {
+      limit: ADMIN_PAGE_SIZE,
+      offset,
+      ...(adminPaymentStatusFilter === "all" ? {} : { status: adminPaymentStatusFilter }),
+    };
+  }
+
   async function refreshAdminOperations(token = session?.access_token) {
     if (!token || !isAdmin) {
       return;
@@ -1674,7 +1692,7 @@ export default function Home() {
     ] = await Promise.all([
         listAdminUsers(token, { limit: ADMIN_PAGE_SIZE }),
         listAdminBookings(token, { limit: ADMIN_PAGE_SIZE }),
-        listAdminPayments(token, { limit: ADMIN_PAGE_SIZE }),
+        listAdminPayments(token, adminPaymentListParams()),
         getAdminEmailStatus(token),
         getAdminPaymentProviderStatus(token),
         getAdminStorageStatus(token),
@@ -1701,7 +1719,7 @@ export default function Home() {
       });
       setAdminUsers((current) => [...current, ...page.items]);
       setAdminUsersTotal(page.total);
-    }, "Loading bookings");
+    }, "Loading users");
   }
 
   async function loadMoreAdminBookings() {
@@ -1715,7 +1733,7 @@ export default function Home() {
       });
       setAdminBookings((current) => [...current, ...page.items]);
       setAdminBookingsTotal(page.total);
-    }, "Loading payments");
+    }, "Loading bookings");
   }
 
   async function loadMoreAdminPayments() {
@@ -1724,12 +1742,26 @@ export default function Home() {
     }
     await runAction(async () => {
       const page = await listAdminPayments(session.access_token, {
-        limit: ADMIN_PAGE_SIZE,
-        offset: adminPayments.length,
+        ...adminPaymentListParams(adminPayments.length),
       });
       setAdminPayments((current) => [...current, ...page.items]);
       setAdminPaymentsTotal(page.total);
-    }, "Loading audit events");
+    }, "Loading payments");
+  }
+
+  async function handleAdminPaymentStatusFilter(nextStatus: AdminPaymentStatusFilter) {
+    setAdminPaymentStatusFilter(nextStatus);
+    if (!session || !isAdmin) {
+      return;
+    }
+    await runAction(async () => {
+      const page = await listAdminPayments(session.access_token, {
+        limit: ADMIN_PAGE_SIZE,
+        ...(nextStatus === "all" ? {} : { status: nextStatus }),
+      });
+      setAdminPayments(page.items);
+      setAdminPaymentsTotal(page.total);
+    }, "Filtering payments");
   }
 
   async function loadMoreAuditEvents() {
@@ -3388,6 +3420,21 @@ export default function Home() {
                           {adminPayments.length} of {adminPaymentsTotal}
                         </span>
                       </div>
+                      <div className="button-row compact" aria-label="Payment status filters">
+                        {PAYMENT_STATUS_FILTERS.map((statusFilter) => (
+                          <button
+                            className={`btn secondary ${
+                              adminPaymentStatusFilter === statusFilter ? "active" : ""
+                            }`}
+                            type="button"
+                            key={statusFilter}
+                            onClick={() => handleAdminPaymentStatusFilter(statusFilter)}
+                            disabled={busy}
+                          >
+                            {statusFilter === "all" ? "All" : statusFilter}
+                          </button>
+                        ))}
+                      </div>
                       <div className="audit-list">
                         {adminPayments.length === 0 ? (
                           <div className="muted">Payments will appear here.</div>
@@ -3399,8 +3446,24 @@ export default function Home() {
                                 <div className="muted">
                                   {payment.provider} · {shortId(payment.booking_id)}
                                 </div>
+                                <div className="payment-meta">
+                                  <span>Payment {shortId(payment.id)}</span>
+                                  <span>Booking {shortId(payment.booking_id)}</span>
+                                </div>
+                                <div className="payment-meta">
+                                  <span>Ref {shortId(payment.provider_reference)}</span>
+                                  <span>
+                                    Checkout {shortId(payment.provider_checkout_reference)}
+                                  </span>
+                                </div>
+                                <div className="muted">Created {formatDateTime(payment.created_at)}</div>
                                 {payment.paid_at ? (
                                   <div className="muted">Paid {formatDateTime(payment.paid_at)}</div>
+                                ) : null}
+                                {payment.refunded_at ? (
+                                  <div className="muted">
+                                    Refunded {formatDateTime(payment.refunded_at)}
+                                  </div>
                                 ) : null}
                               </div>
                               <span className={`status ${payment.status}`}>{payment.status}</span>

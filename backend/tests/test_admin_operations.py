@@ -463,6 +463,8 @@ def test_admin_can_list_payments_with_status_filter():
     page = response.json()
     assert page["total"] == 1
     assert page["items"][0]["booking_id"] == booking["id"]
+    assert page["items"][0]["created_at"]
+    assert page["items"][0]["updated_at"]
     assert page["items"][0]["status"] == "pending"
     assert page["items"][0]["provider"] == "mock"
 

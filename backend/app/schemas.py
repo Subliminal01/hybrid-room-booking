@@ -512,6 +512,8 @@ class PaymentResponse(BaseModel):
 
     id: UUID
     booking_id: UUID
+    created_at: datetime
+    updated_at: datetime
     amount: Decimal
     currency: str
     status: PaymentStatus

@@ -112,6 +112,8 @@ export type BookingCreateResponse = {
 export type Payment = {
   id: string;
   booking_id: string;
+  created_at: string;
+  updated_at: string;
   amount: string;
   currency: string;
   status: "pending" | "succeeded" | "failed" | "refunded";
