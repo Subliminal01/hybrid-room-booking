@@ -754,6 +754,10 @@ export default function Home() {
     () => buildRecommendedPlan(results, apiSlots, stayPlanCoveredKeys),
     [apiSlots, results, stayPlanCoveredKeys],
   );
+  const fullRecommendedPlan = useMemo(
+    () => buildRecommendedPlan(results, apiSlots, new Set<string>()),
+    [apiSlots, results],
+  );
   const recommendedPlanCoveredCount = recommendedPlan.items.reduce(
     (total, item) => total + item.slots.length,
     0,
@@ -1405,6 +1409,27 @@ export default function Home() {
         recommendedPlanCoveredCount === 1 ? "" : "s"
       }.`,
     );
+  }
+
+  function replaceWithRecommendedPlan() {
+    if (!session) {
+      setError("Sign in before adding stays to checkout.");
+      return;
+    }
+    if (fullRecommendedPlan.items.length === 0) {
+      setError("No recommendation is available for this rota.");
+      return;
+    }
+
+    setStayPlan(
+      fullRecommendedPlan.items.map((recommendation, index) => ({
+        id: `${recommendation.workspace.id}-recommended-${index}`,
+        workspace: recommendation.workspace,
+        slots: recommendation.slots,
+      })),
+    );
+    setError(null);
+    setMessage("Replaced stay plan with the recommended room combination.");
   }
 
   async function handleCheckoutPlan() {
@@ -2476,15 +2501,30 @@ export default function Home() {
                           {recommendedPlanCoveredCount === 1 ? "" : "s"} for{" "}
                           {formatMoney(String(recommendedPlanTotal))}
                         </div>
+                        <div className="muted">
+                          Prioritizes rooms covering more open dates, then lower total price.
+                        </div>
                       </div>
-                      <button
-                        className="btn secondary"
-                        type="button"
-                        onClick={applyRecommendedPlan}
-                        disabled={!session || busy}
-                      >
-                        Add recommendation
-                      </button>
+                      <div className="button-row compact">
+                        <button
+                          className="btn secondary"
+                          type="button"
+                          onClick={applyRecommendedPlan}
+                          disabled={!session || busy}
+                        >
+                          Add recommendation
+                        </button>
+                        {stayPlan.length > 0 ? (
+                          <button
+                            className="btn secondary"
+                            type="button"
+                            onClick={replaceWithRecommendedPlan}
+                            disabled={!session || busy}
+                          >
+                            Use instead
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                     <div className="recommendation-list">
                       {recommendedPlan.items.map((item) => (

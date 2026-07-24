@@ -312,6 +312,11 @@ a:hover {
   gap: 10px;
 }
 
+.button-row.compact {
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .rota-presets {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
