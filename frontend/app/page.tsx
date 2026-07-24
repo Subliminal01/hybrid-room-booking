@@ -172,6 +172,9 @@ type RazorpayCheckoutOptions = {
   theme?: {
     color?: string;
   };
+  modal?: {
+    ondismiss?: () => void;
+  };
 };
 
 type RazorpayConstructor = new (options: RazorpayCheckoutOptions) => {
@@ -502,6 +505,28 @@ function cancellationPolicyText(booking: Booking) {
     return "Cancellation is eligible for a full refund because check-in is more than 24 hours away.";
   }
   return "Pending holds can be cancelled before they expire.";
+}
+
+function bookingGroupPaymentHint(group: BookingGroupSummary) {
+  if (group.status === "pending") {
+    const expiresAt = group.payableBooking?.expires_at ?? group.firstBooking.expires_at;
+    if (expiresAt) {
+      return `Payment is still needed by ${formatDateTime(
+        expiresAt,
+      )}. If checkout was closed or failed, use Pay / retry before the hold expires.`;
+    }
+    return "Payment is still needed. If checkout was closed or failed, use Pay / retry.";
+  }
+  if (group.status === "confirmed") {
+    return "Payment confirmed. Receipt is available for this booking.";
+  }
+  if (group.status === "expired") {
+    return "This payment hold expired. Search again to find current availability.";
+  }
+  if (group.status === "cancelled") {
+    return "This booking group was cancelled.";
+  }
+  return "This rota group has mixed payment and booking states. Open details to review each day.";
 }
 
 function summarizeBookingGroup(bookings: Booking[]): BookingGroupSummary | null {
@@ -1516,6 +1541,14 @@ export default function Home() {
           },
           theme: {
             color: "#147d64",
+          },
+          modal: {
+            ondismiss: () => {
+              setMessage(
+                "Checkout closed. Your booking is still pending, so use Pay / retry before the hold expires.",
+              );
+              void refreshBookings(session.access_token);
+            },
           },
           handler: () => {
             setMessage("Payment submitted. Your booking will confirm after Razorpay sends the webhook.");
@@ -4129,6 +4162,9 @@ export default function Home() {
                             Pay by {formatDateTime(booking.expires_at)}
                           </div>
                         ) : null}
+                        {group.payableBooking ? (
+                          <div className="muted">{bookingGroupPaymentHint(group)}</div>
+                        ) : null}
                         {group.cancellableBooking ? (
                           <div className="muted">
                             {cancellationPolicyText(group.cancellableBooking)}
@@ -4154,7 +4190,7 @@ export default function Home() {
                             onClick={() => handlePayBooking(group.payableBooking as Booking)}
                             disabled={busy}
                           >
-                            Pay
+                            Pay / retry
                           </button>
                         ) : null}
                         {group.status === "confirmed" || group.status === "mixed" ? (
@@ -4213,6 +4249,12 @@ export default function Home() {
                     Confirmed bookings can be cancelled from booking history. Eligible paid days are
                     refunded through the original payment provider; provider and bank timelines may vary.
                   </div>
+                  {selectedBookingGroup.payableBooking ? (
+                    <div className="policy-note">
+                      {bookingGroupPaymentHint(selectedBookingGroup)} We reuse active checkout attempts
+                      and create a fresh provider order after failed payments.
+                    </div>
+                  ) : null}
                   <div className="button-row">
                     {selectedBookingGroup.payableBooking ? (
                       <button
@@ -4221,7 +4263,7 @@ export default function Home() {
                         onClick={() => handlePayBooking(selectedBookingGroup.payableBooking as Booking)}
                         disabled={busy}
                       >
-                        Pay now
+                        Pay / retry
                       </button>
                     ) : null}
                     {selectedBookingGroup.cancellableBooking ? (
