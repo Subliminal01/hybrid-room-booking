@@ -598,6 +598,29 @@ a:hover {
   gap: 10px;
 }
 
+.recommendation-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #b9d8cf;
+  border-radius: 8px;
+  background: #f6fbf9;
+  padding: 12px;
+}
+
+.recommendation-list {
+  display: grid;
+  gap: 8px;
+}
+
+.recommendation-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, auto);
+  gap: 10px;
+  align-items: center;
+  border-top: 1px solid rgba(20, 125, 100, 0.14);
+  padding-top: 8px;
+}
+
 .receipt-panel {
   display: grid;
   grid-template-columns: 1fr;

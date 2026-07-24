@@ -141,6 +141,11 @@ type StayPlanItem = {
   slots: TimeSlot[];
 };
 
+type PlanRecommendationItem = {
+  workspace: Workspace;
+  slots: TimeSlot[];
+};
+
 type BookingGroupSummary = {
   booking_group_id: string;
   bookings: Booking[];
@@ -590,6 +595,58 @@ function matchedWorkspaceSlots(workspace: Workspace, fallbackSlots: TimeSlot[]) 
   return workspace.matched_slots?.length ? workspace.matched_slots : fallbackSlots;
 }
 
+function buildRecommendedPlan(
+  workspaces: Workspace[],
+  selectedSlots: TimeSlot[],
+  alreadyCoveredKeys: Set<string>,
+) {
+  const remainingKeys = new Set(
+    selectedSlots.map(slotKey).filter((key) => !alreadyCoveredKeys.has(key)),
+  );
+  const recommendations: PlanRecommendationItem[] = [];
+
+  while (remainingKeys.size > 0) {
+    const bestMatch = workspaces
+      .map((workspace) => {
+        const slots = matchedWorkspaceSlots(workspace, selectedSlots).filter((slot) =>
+          remainingKeys.has(slotKey(slot)),
+        );
+        return {
+          workspace,
+          slots,
+          totalPrice: Number(workspace.daily_price) * slots.length,
+        };
+      })
+      .filter((item) => item.slots.length > 0)
+      .sort((a, b) => {
+        if (b.slots.length !== a.slots.length) {
+          return b.slots.length - a.slots.length;
+        }
+        if (a.totalPrice !== b.totalPrice) {
+          return a.totalPrice - b.totalPrice;
+        }
+        return a.workspace.title.localeCompare(b.workspace.title);
+      })[0];
+
+    if (!bestMatch) {
+      break;
+    }
+
+    recommendations.push({
+      workspace: bestMatch.workspace,
+      slots: bestMatch.slots,
+    });
+    for (const slot of bestMatch.slots) {
+      remainingKeys.delete(slotKey(slot));
+    }
+  }
+
+  return {
+    items: recommendations,
+    uncoveredSlots: selectedSlots.filter((slot) => remainingKeys.has(slotKey(slot))),
+  };
+}
+
 function draftFromRules(rules: AvailabilityRule[] = []): AvailabilityDraft {
   if (rules.length === 0) {
     return { days: [0, 1, 2, 3, 4], start: "09:00", end: "18:00" };
@@ -692,6 +749,18 @@ export default function Home() {
         0,
       ),
     [stayPlan],
+  );
+  const recommendedPlan = useMemo(
+    () => buildRecommendedPlan(results, apiSlots, stayPlanCoveredKeys),
+    [apiSlots, results, stayPlanCoveredKeys],
+  );
+  const recommendedPlanCoveredCount = recommendedPlan.items.reduce(
+    (total, item) => total + item.slots.length,
+    0,
+  );
+  const recommendedPlanTotal = recommendedPlan.items.reduce(
+    (total, item) => total + Number(item.workspace.daily_price) * item.slots.length,
+    0,
   );
   const coveragePercent = selectedDays > 0
     ? Math.round((stayPlanCoveredKeys.size / selectedDays) * 100)
@@ -1298,6 +1367,44 @@ export default function Home() {
 
   function removeStayPlanItem(itemId: string) {
     setStayPlan((current) => current.filter((item) => item.id !== itemId));
+  }
+
+  function applyRecommendedPlan() {
+    if (!session) {
+      setError("Sign in before adding stays to checkout.");
+      return;
+    }
+    if (recommendedPlan.items.length === 0) {
+      setError("No recommendation is available for the remaining stays.");
+      return;
+    }
+
+    setStayPlan((current) => {
+      let next = [...current];
+      for (const recommendation of recommendedPlan.items) {
+        const existing = next.find((item) => item.workspace.id === recommendation.workspace.id);
+        if (existing) {
+          next = next.map((item) =>
+            item.workspace.id === recommendation.workspace.id
+              ? { ...item, slots: [...item.slots, ...recommendation.slots] }
+              : item,
+          );
+        } else {
+          next.push({
+            id: `${recommendation.workspace.id}-${Date.now()}-${next.length}`,
+            workspace: recommendation.workspace,
+            slots: recommendation.slots,
+          });
+        }
+      }
+      return next;
+    });
+    setError(null);
+    setMessage(
+      `Added recommended plan covering ${recommendedPlanCoveredCount} more stay${
+        recommendedPlanCoveredCount === 1 ? "" : "s"
+      }.`,
+    );
   }
 
   async function handleCheckoutPlan() {
@@ -2358,6 +2465,60 @@ export default function Home() {
                     ))}
                   </div>
                 )}
+
+                {hasSearched && results.length > 0 && recommendedPlan.items.length > 0 ? (
+                  <div className="recommendation-panel">
+                    <div className="panel-subheader">
+                      <div>
+                        <h3>Recommended plan</h3>
+                        <div className="muted">
+                          Covers {recommendedPlanCoveredCount} more stay
+                          {recommendedPlanCoveredCount === 1 ? "" : "s"} for{" "}
+                          {formatMoney(String(recommendedPlanTotal))}
+                        </div>
+                      </div>
+                      <button
+                        className="btn secondary"
+                        type="button"
+                        onClick={applyRecommendedPlan}
+                        disabled={!session || busy}
+                      >
+                        Add recommendation
+                      </button>
+                    </div>
+                    <div className="recommendation-list">
+                      {recommendedPlan.items.map((item) => (
+                        <div className="recommendation-row" key={item.workspace.id}>
+                          <div>
+                            <strong>{item.workspace.title}</strong>
+                            <div className="muted">
+                              {item.slots.length} stay{item.slots.length === 1 ? "" : "s"} ·{" "}
+                              {formatMoney(
+                                String(Number(item.workspace.daily_price) * item.slots.length),
+                                item.workspace.currency,
+                              )}
+                            </div>
+                          </div>
+                          <div className="muted">
+                            {item.slots.map((slot) => formatDate(slot.start_at)).join(", ")}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {recommendedPlan.uncoveredSlots.length > 0 ? (
+                      <div className="muted">
+                        Still unavailable:{" "}
+                        {recommendedPlan.uncoveredSlots
+                          .map((slot) => formatDate(slot.start_at))
+                          .join(", ")}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : hasSearched && results.length > 0 && uncoveredSlots.length > 0 ? (
+                  <div className="policy-note">
+                    No remaining search result can cover the still-needed stays.
+                  </div>
+                ) : null}
 
                 {uncoveredSlots.length > 0 ? (
                   <div className="policy-note">
